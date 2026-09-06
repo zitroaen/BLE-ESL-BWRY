@@ -39,6 +39,8 @@ from .const import (
     MANUFACTURER_ID,
     MANUFACTURER_ID_ALT,
     MODELS,
+    UUID_COMMAND,
+    UUID_SECURITY,
     UUID_STATUS,
     WRITE_MODE_NO_RESPONSE,
     WRITE_MODE_RESPONSE,
@@ -508,6 +510,28 @@ class ESLDevice:
     # Commands
     # ------------------------------------------------------------------
 
+    @callback
+    def _record_command(
+        self, kind: str, *, ok: bool, detail: str | None = None
+    ) -> None:
+        """Remember how the last command went, for the diagnostics report."""
+        self.state.last_command = {
+            "kind": kind,
+            "at": dt_util.utcnow().isoformat(),
+            "result": "ok" if ok else "failed",
+            "detail": detail,
+        }
+
+    async def _run_command(self, kind: str, action) -> None:
+        """Run one command, recording the outcome either way."""
+        try:
+            async with self.connection() as client:
+                await action(client)
+        except Exception as err:
+            self._record_command(kind, ok=False, detail=f"{type(err).__name__}: {err}")
+            raise
+        self._record_command(kind, ok=True)
+
     async def async_set_rgb(
         self,
         red: int,
@@ -522,7 +546,7 @@ class ESLDevice:
         off_ms = self.state.rgb_off_ms if off_ms is None else off_ms
         work_ms = self.state.rgb_work_ms if work_ms is None else work_ms
 
-        async with self.connection() as client:
+        async def _send(client) -> None:
             await protocol.set_rgb(
                 client,
                 red,
@@ -533,6 +557,8 @@ class ESLDevice:
                 work_ms,
                 response=self.write_response,
             )
+
+        await self._run_command("set_rgb", _send)
 
         self.state.rgb_color = (red, green, blue)
         self.state.rgb_is_on = work_ms > 0 and any((red, green, blue))
@@ -550,8 +576,10 @@ class ESLDevice:
 
     async def async_clear_screen(self) -> None:
         """Clear the panel (section 3.7)."""
-        async with self.connection() as client:
-            await protocol.clear_screen(client, response=self.write_response)
+        await self._run_command(
+            "clear_screen",
+            lambda client: protocol.clear_screen(client, response=self.write_response),
+        )
         _LOGGER.debug("%s screen cleared", self.address)
 
     async def async_send_image(self, request: ImageRequest) -> None:
@@ -563,8 +591,10 @@ class ESLDevice:
         data = await self.hass.async_add_executor_job(
             render_image, request, self.width, self.height
         )
-        async with self.connection() as client:
-            await protocol.send_image(client, data, compressed=False)
+        await self._run_command(
+            f"send_image ({len(data)} bytes)",
+            lambda client: protocol.send_image(client, data, compressed=False),
+        )
         _LOGGER.debug("%s image uploaded (%d bytes)", self.address, len(data))
 
     async def async_send_raw_command(
@@ -693,6 +723,20 @@ class ESLDevice:
             await protocol.refresh_multi(client, index_a, index_b)
 
 
+# The two characteristics every command path needs. A connection whose GATT
+# table lacks them is unusable, and that happens with a stale service cache.
+REQUIRED_CHARACTERISTICS = {"security": UUID_SECURITY, "command": UUID_COMMAND}
+
+
+def _missing_characteristics(client: BleakClientWithServiceCache) -> list[str]:
+    """Names of the characteristics this connection cannot offer."""
+    return [
+        name
+        for name, uuid in REQUIRED_CHARACTERISTICS.items()
+        if client.services.get_characteristic(uuid) is None
+    ]
+
+
 async def _async_close(client: BleakClientWithServiceCache, address: str) -> None:
     """Close a connection without letting teardown failures surface."""
     try:
@@ -729,18 +773,51 @@ class _ESLConnection:
             # Reuse a live connection; the unlock is per connection and holds.
             existing = device._client
             if existing is not None and existing.is_connected:
-                _LOGGER.debug("%s reusing the open connection", device.address)
-                return existing
+                if not _missing_characteristics(existing):
+                    _LOGGER.debug("%s reusing the open connection", device.address)
+                    return existing
+                # A held connection with an unusable table is worse than none.
+                _LOGGER.debug(
+                    "%s dropping the held connection, its GATT table is incomplete",
+                    device.address,
+                )
+                await _async_close(existing, device.address)
             device._client = None
 
-            ble_device = await device._async_wait_for_connectable(self._wait)
-            client = await establish_connection(
-                BleakClientWithServiceCache,
-                ble_device,
-                device.address,
-                timeout=CONNECT_TIMEOUT,
-                disconnected_callback=device._on_disconnected,
-            )
+            # Two attempts: a cached GATT table can be stale, and the label
+            # then reports "Characteristic ... was not found" for a
+            # characteristic a probe has already seen. Clearing the cache and
+            # rediscovering is the only way out of that.
+            missing: list[str] = []
+            for attempt in (1, 2):
+                ble_device = await device._async_wait_for_connectable(self._wait)
+                client = await establish_connection(
+                    BleakClientWithServiceCache,
+                    ble_device,
+                    device.address,
+                    timeout=CONNECT_TIMEOUT,
+                    disconnected_callback=device._on_disconnected,
+                )
+                if not (missing := _missing_characteristics(client)):
+                    break
+
+                _LOGGER.warning(
+                    "%s: %s characteristic(s) missing on attempt %d, clearing the "
+                    "service cache and rediscovering",
+                    device.address,
+                    ", ".join(missing),
+                    attempt,
+                )
+                await client.clear_cache()
+                await _async_close(client, device.address)
+                client = None
+            else:
+                raise HomeAssistantError(
+                    f"Label {device.address} did not expose its "
+                    f"{', '.join(missing)} characteristic(s) even after the "
+                    "service cache was cleared"
+                )
+
             await protocol.unlock(client)
             device._client = client
             return client

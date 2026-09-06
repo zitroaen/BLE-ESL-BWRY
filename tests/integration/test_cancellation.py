@@ -9,6 +9,8 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .conftest import attach_services
+
 
 async def _setup(hass: HomeAssistant, entry):
     entry.add_to_hass(hass)
@@ -66,6 +68,7 @@ async def test_timeout_during_unlock_closes_the_connection(
         def __init__(self):
             self.is_connected = True
             self.disconnects = 0
+            attach_services(self)
 
         async def disconnect(self):
             self.disconnects += 1

@@ -323,6 +323,19 @@ Der Diagnose-Download baut seit 0.9.1 **keine Verbindung mehr auf**. Für
 einen Probe-Bericht den Button **Diagnose-Probe** verwenden; das Ergebnis
 landet dann auch in der Diagnose-Datei.
 
+### „Characteristic 31323032-… was not found"
+
+Die Verbindung stand, aber die zwischengespeicherte GATT-Tabelle enthielt
+die Command-Charakteristik nicht — obwohl ein Probe sie zuvor gefunden
+hatte. Seit 0.11.0 prüft die Integration direkt nach dem Verbinden, ob
+Security- und Command-Charakteristik vorhanden sind. Fehlen sie, wird der
+Service-Cache verworfen und **einmal neu verbunden**. Hilft auch das nicht,
+sagt die Fehlermeldung das ausdrücklich, statt an einem Schreibvorgang zu
+scheitern.
+
+Auch eine offen gehaltene Verbindung wird vor jeder Wiederverwendung
+geprüft.
+
 ### Das Label reagiert nicht auf Kommandos
 
 Ein Schreibvorgang auf die Command-Charakteristik meldet keinen Fehler,

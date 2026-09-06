@@ -65,3 +65,28 @@ def mock_bluetooth():
         ),
     ):
         yield
+
+
+class FakeServices:
+    """A GATT table offering the characteristics the integration requires."""
+
+    def __init__(self, present: bool = True) -> None:
+        self.present = present
+        self.cleared = 0
+
+    def get_characteristic(self, uuid):
+        return object() if self.present else None
+
+
+def attach_services(client, present: bool = True) -> FakeServices:
+    """Give a fake client a GATT table and a clear_cache implementation."""
+    services = FakeServices(present)
+    client.services = services
+
+    async def clear_cache():
+        services.cleared += 1
+        services.present = True
+        return True
+
+    client.clear_cache = clear_cache
+    return services

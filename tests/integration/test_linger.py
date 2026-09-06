@@ -10,6 +10,8 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.esl_zhsunyco.const import CONF_LINGER_S
 
+from .conftest import attach_services
+
 
 class FakeClient:
     """Counts connects and disconnects."""
@@ -17,6 +19,7 @@ class FakeClient:
     def __init__(self) -> None:
         self.is_connected = True
         self.disconnects = 0
+        attach_services(self)
 
     async def disconnect(self):
         self.disconnects += 1
