@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from bleak.backends.device import BLEDevice
+from bleak.exc import BleakCharacteristicNotFoundError
 from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
@@ -68,6 +70,14 @@ ADVERTISEMENT_WAIT_S = 180
 # Home Assistant already holds, so one missed callback cannot leave every
 # entity blank until the next connectable poll, which may be hours away.
 SEED_INTERVAL = timedelta(minutes=5)
+
+# An e-ink refresh takes seconds, and the status characteristic is the only
+# feedback the label gives. Watching it across a command turns "the write was
+# accepted" into "the label actually did something".
+STATUS_WATCH_S = 8.0
+STATUS_POLL_S = 0.5
+# Belt and braces so a misconfigured interval cannot spin.
+MAX_STATUS_SAMPLES = 60
 
 
 @dataclass
@@ -512,25 +522,94 @@ class ESLDevice:
 
     @callback
     def _record_command(
-        self, kind: str, *, ok: bool, detail: str | None = None
+        self,
+        kind: str,
+        *,
+        ok: bool,
+        detail: str | None = None,
+        status_before: dict[str, Any] | None = None,
+        status_after: dict[str, Any] | None = None,
     ) -> None:
         """Remember how the last command went, for the diagnostics report."""
-        self.state.last_command = {
+        record: dict[str, Any] = {
             "kind": kind,
             "at": dt_util.utcnow().isoformat(),
             "result": "ok" if ok else "failed",
             "detail": detail,
         }
+        if status_before is not None or status_after is not None:
+            record["status_before"] = status_before
+            record["status_after"] = status_after
+            became_busy = bool((status_after or {}).get("became_busy"))
+            record["label_reacted"] = became_busy
+            record["interpretation"] = (
+                "the panel went busy, so it acted on the command"
+                if became_busy
+                else "the write was accepted but the panel never went busy; "
+                "the command was most likely not understood"
+            )
+        self.state.last_command = record
+
+    async def _drop_connection_and_clear_cache(
+        self, used: BleakClientWithServiceCache | None = None
+    ) -> None:
+        """Throw away a connection whose GATT table turned out to be wrong."""
+        async with self._lock:
+            client, self._client = self._client, None
+            for candidate in (client, used):
+                if candidate is None:
+                    continue
+                with contextlib.suppress(Exception):
+                    await candidate.clear_cache()
+            if client is not None:
+                await _async_close(client, self.address)
 
     async def _run_command(self, kind: str, action) -> None:
-        """Run one command, recording the outcome either way."""
-        try:
-            async with self.connection() as client:
-                await action(client)
-        except Exception as err:
-            self._record_command(kind, ok=False, detail=f"{type(err).__name__}: {err}")
-            raise
-        self._record_command(kind, ok=True)
+        """Run one command and check whether the label reacted.
+
+        Retries once on a missing characteristic: the GATT table can be a
+        stale cache, and clearing it is the only way to recover.
+        """
+        for attempt in (1, 2):
+            # Held across the context manager: on failure __aexit__ already
+            # discards the connection, so the retry would otherwise have
+            # nothing left whose cache it could clear.
+            used: BleakClientWithServiceCache | None = None
+            try:
+                async with self.connection() as client:
+                    used = client
+                    before = await _read_status(client)
+                    await action(client)
+                    after = await _watch_status(client)
+                break
+            except BleakCharacteristicNotFoundError as err:
+                if attempt == 2:
+                    self._record_command(
+                        kind, ok=False, detail=f"{type(err).__name__}: {err}"
+                    )
+                    raise
+                _LOGGER.warning(
+                    "%s: %s during %s, clearing the service cache and retrying",
+                    self.address,
+                    err,
+                    kind,
+                )
+                await self._drop_connection_and_clear_cache(used)
+            except Exception as err:
+                self._record_command(
+                    kind, ok=False, detail=f"{type(err).__name__}: {err}"
+                )
+                raise
+
+        self._record_command(kind, ok=True, status_before=before, status_after=after)
+
+        # Reflect what the label reported, so the status sensor is current.
+        final = after.get("final") or {}
+        if isinstance(final.get("busy"), bool):
+            self.state.busy = final["busy"]
+        if isinstance(final.get("error_code"), int):
+            self.state.error = final["error_code"]
+        self.coordinator.async_update_listeners()
 
     async def async_set_rgb(
         self,
@@ -735,6 +814,53 @@ def _missing_characteristics(client: BleakClientWithServiceCache) -> list[str]:
         for name, uuid in REQUIRED_CHARACTERISTICS.items()
         if client.services.get_characteristic(uuid) is None
     ]
+
+
+async def _read_status(client: BleakClientWithServiceCache) -> dict[str, Any]:
+    """Read the status characteristic without letting a failure propagate."""
+    try:
+        raw = bytes(await client.read_gatt_char(UUID_STATUS))
+    except Exception as err:  # noqa: BLE001 - part of the observation
+        return {"error": f"{type(err).__name__}: {err}"}
+    return {
+        "raw": raw[:4].hex(" "),
+        "busy": bool(raw[0]) if raw else None,
+        "error_code": raw[1] if len(raw) > 1 else None,
+    }
+
+
+async def _watch_status(client: BleakClientWithServiceCache) -> dict[str, Any]:
+    """Follow the status characteristic while the panel would be working.
+
+    A busy flag that never rises means the label accepted the write and did
+    nothing with it, which is exactly the case a plain "ok" cannot show.
+    """
+    samples: list[dict[str, Any]] = []
+    became_busy = False
+    # Bound by the clock, not by summing the poll interval: a zero interval
+    # would otherwise never reach the deadline.
+    deadline = time.monotonic() + STATUS_WATCH_S
+
+    while True:
+        sample = await _read_status(client)
+        samples.append(sample)
+        if "error" in sample:
+            # Polling a characteristic we cannot read tells us nothing.
+            break
+        if sample.get("busy"):
+            became_busy = True
+        elif became_busy:
+            # Busy came and went: the refresh finished.
+            break
+        if time.monotonic() >= deadline or len(samples) >= MAX_STATUS_SAMPLES:
+            break
+        await asyncio.sleep(STATUS_POLL_S)
+
+    return {
+        "became_busy": became_busy,
+        "final": samples[-1] if samples else None,
+        "samples": len(samples),
+    }
 
 
 async def _async_close(client: BleakClientWithServiceCache, address: str) -> None:

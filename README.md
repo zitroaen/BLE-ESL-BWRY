@@ -323,6 +323,27 @@ Der Diagnose-Download baut seit 0.9.1 **keine Verbindung mehr auf**. Für
 einen Probe-Bericht den Button **Diagnose-Probe** verwenden; das Ergebnis
 landet dann auch in der Diagnose-Datei.
 
+### Hat das Kommando wirklich etwas bewirkt?
+
+Ein Schreibvorgang auf die Command-Charakteristik meldet Erfolg, **egal ob
+das Label ihn ausführt**. Seit 0.12.0 liest die Integration deshalb um jedes
+Kommando herum die Status-Charakteristik: einmal davor, dann bis zu 8
+Sekunden lang danach. Ein E-Ink-Refresh dauert Sekunden, in denen das Panel
+`busy` meldet.
+
+Das Ergebnis steht in der Diagnose unter `last_command`:
+
+```json
+"label_reacted": true,
+"interpretation": "the panel went busy, so it acted on the command"
+```
+
+- `label_reacted: true` → das Panel hat gearbeitet, das Kommando kam an
+- `label_reacted: false` → der Schreibvorgang wurde angenommen, das Panel
+  hat aber nichts getan; die Kodierung stimmt vermutlich nicht
+
+Der Status-Sensor wird nach jedem Kommando direkt aktualisiert.
+
 ### „Characteristic 31323032-… was not found"
 
 Die Verbindung stand, aber die zwischengespeicherte GATT-Tabelle enthielt
