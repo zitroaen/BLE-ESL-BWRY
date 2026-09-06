@@ -1,0 +1,5 @@
+# Pulls in Home Assistant itself plus the bluetooth stack the integration needs.
+pytest-homeassistant-custom-component
+bleak-retry-connector
+pillow
+aiousbwatcher

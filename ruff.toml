@@ -1,0 +1,13 @@
+target-version = "py312"
+line-length = 88
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "D"]
+ignore = ["D203", "D213"]
+
+[lint.per-file-ignores]
+"tests/*" = ["D101", "D102", "D103", "D107"]
+"custom_components/esl_zhsunyco/imaging.py" = ["B008"]
+
+[lint.pydocstyle]
+convention = "pep257"

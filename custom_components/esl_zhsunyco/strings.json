@@ -1,0 +1,101 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "Add ESL label",
+        "description": "Enter the Bluetooth address of the label. Advertised addresses start with 66:66.",
+        "data": {
+          "address": "Bluetooth address",
+          "model": "Panel model",
+          "scan_interval_min": "Poll interval (0 disables polling)"
+        },
+        "data_description": {
+          "scan_interval_min": "How often to connect for status and version. Battery level arrives passively from advertisements, so a long interval is fine."
+        }
+      },
+      "confirm": {
+        "title": "Add ESL label",
+        "description": "Set up {name}?",
+        "data": {
+          "model": "Panel model",
+          "scan_interval_min": "Poll interval (0 disables polling)"
+        }
+      }
+    },
+    "error": {
+      "invalid_address": "Not a valid Bluetooth address, expected AA:BB:CC:DD:EE:FF"
+    },
+    "abort": {
+      "already_configured": "This label is already set up"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "ESL options",
+        "data": {
+          "scan_interval_min": "Poll interval (0 disables polling)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_voltage": { "name": "Battery voltage" },
+      "status": {
+        "name": "Status",
+        "state": {
+          "no_error": "OK",
+          "busy": "Busy",
+          "epd_init_error": "Display init error",
+          "epd_write_error": "Display write error",
+          "decompression_error": "Decompression error",
+          "ota_error": "OTA error",
+          "unlock_failed": "Unlock failed",
+          "unknown": "Unknown"
+        }
+      },
+      "signal_strength": { "name": "Signal strength" },
+      "display_version": { "name": "Display version" },
+      "product_id": { "name": "Product ID" }
+    },
+    "button": {
+      "clear_screen": { "name": "Clear screen" }
+    },
+    "light": {
+      "rgb": { "name": "RGB LED" }
+    },
+    "number": {
+      "rgb_on_ms": { "name": "RGB on time" },
+      "rgb_off_ms": { "name": "RGB off time" },
+      "rgb_work_ms": { "name": "RGB duration" }
+    }
+  },
+  "services": {
+    "set_rgb": {
+      "name": "Set RGB",
+      "description": "Drives the label's RGB LED (command 0xA508).",
+      "fields": {
+        "rgb_color": { "name": "Colour", "description": "RGB colour to show." },
+        "on_ms": { "name": "On time", "description": "Blink on time in milliseconds. Defaults to the RGB on time number entity." },
+        "off_ms": { "name": "Off time", "description": "Blink off time in milliseconds. Defaults to the RGB off time number entity." },
+        "work_ms": { "name": "Duration", "description": "Total run time in milliseconds. Defaults to the RGB duration number entity." }
+      }
+    },
+    "clear_screen": {
+      "name": "Clear screen",
+      "description": "Clears the e-ink panel (command 0xA504)."
+    },
+    "set_image": {
+      "name": "Set image",
+      "description": "Renders an image file and uploads it to the panel. Experimental: the pixel format is not documented by the vendor.",
+      "fields": {
+        "path": { "name": "File path", "description": "Path to the image. Must be inside an allowed directory." },
+        "rotate": { "name": "Rotation", "description": "Rotate the image before fitting it to the panel." },
+        "invert": { "name": "Invert", "description": "Invert black and white on 1 bit panels." },
+        "dither": { "name": "Dither", "description": "Apply Floyd-Steinberg dithering." }
+      }
+    }
+  }
+}

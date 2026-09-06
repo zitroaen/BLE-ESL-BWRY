@@ -1,0 +1,69 @@
+set_rgb:
+  target:
+    device:
+      integration: esl_zhsunyco
+  fields:
+    rgb_color:
+      required: true
+      example: "[255, 0, 0]"
+      selector:
+        color_rgb:
+    on_ms:
+      required: false
+      example: 500
+      selector:
+        number:
+          min: 0
+          max: 65535
+          unit_of_measurement: ms
+          mode: box
+    off_ms:
+      required: false
+      example: 500
+      selector:
+        number:
+          min: 0
+          max: 65535
+          unit_of_measurement: ms
+          mode: box
+    work_ms:
+      required: false
+      example: 30000
+      selector:
+        number:
+          min: 0
+          max: 86400000
+          unit_of_measurement: ms
+          mode: box
+
+clear_screen:
+  target:
+    device:
+      integration: esl_zhsunyco
+
+set_image:
+  target:
+    device:
+      integration: esl_zhsunyco
+  fields:
+    path:
+      required: true
+      example: /config/www/label.png
+      selector:
+        text:
+    rotate:
+      required: false
+      default: 0
+      selector:
+        select:
+          options: ["0", "90", "180", "270"]
+    invert:
+      required: false
+      default: false
+      selector:
+        boolean:
+    dither:
+      required: false
+      default: true
+      selector:
+        boolean:

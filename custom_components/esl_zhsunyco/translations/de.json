@@ -1,0 +1,101 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "ESL-Label hinzufügen",
+        "description": "Bluetooth-Adresse des Labels eingeben. Ausgestrahlte Adressen beginnen mit 66:66.",
+        "data": {
+          "address": "Bluetooth-Adresse",
+          "model": "Panel-Modell",
+          "scan_interval_min": "Abfrageintervall (0 deaktiviert die Abfrage)"
+        },
+        "data_description": {
+          "scan_interval_min": "Wie oft für Status und Version verbunden wird. Der Batteriestand kommt passiv aus dem Advertisement, ein langes Intervall ist daher unproblematisch."
+        }
+      },
+      "confirm": {
+        "title": "ESL-Label hinzufügen",
+        "description": "{name} einrichten?",
+        "data": {
+          "model": "Panel-Modell",
+          "scan_interval_min": "Abfrageintervall (0 deaktiviert die Abfrage)"
+        }
+      }
+    },
+    "error": {
+      "invalid_address": "Keine gültige Bluetooth-Adresse, erwartet wird AA:BB:CC:DD:EE:FF"
+    },
+    "abort": {
+      "already_configured": "Dieses Label ist bereits eingerichtet"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "ESL-Optionen",
+        "data": {
+          "scan_interval_min": "Abfrageintervall (0 deaktiviert die Abfrage)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_voltage": { "name": "Batteriespannung" },
+      "status": {
+        "name": "Status",
+        "state": {
+          "no_error": "OK",
+          "busy": "Beschäftigt",
+          "epd_init_error": "Display-Initialisierungsfehler",
+          "epd_write_error": "Display-Schreibfehler",
+          "decompression_error": "Dekomprimierungsfehler",
+          "ota_error": "OTA-Fehler",
+          "unlock_failed": "Entsperren fehlgeschlagen",
+          "unknown": "Unbekannt"
+        }
+      },
+      "signal_strength": { "name": "Signalstärke" },
+      "display_version": { "name": "Display-Version" },
+      "product_id": { "name": "Produkt-ID" }
+    },
+    "button": {
+      "clear_screen": { "name": "Bildschirm löschen" }
+    },
+    "light": {
+      "rgb": { "name": "RGB-LED" }
+    },
+    "number": {
+      "rgb_on_ms": { "name": "RGB-Einschaltzeit" },
+      "rgb_off_ms": { "name": "RGB-Ausschaltzeit" },
+      "rgb_work_ms": { "name": "RGB-Dauer" }
+    }
+  },
+  "services": {
+    "set_rgb": {
+      "name": "RGB setzen",
+      "description": "Steuert die RGB-LED des Labels an (Kommando 0xA508).",
+      "fields": {
+        "rgb_color": { "name": "Farbe", "description": "Anzuzeigende RGB-Farbe." },
+        "on_ms": { "name": "Einschaltzeit", "description": "Blink-Einschaltzeit in Millisekunden. Standard ist die Number-Entität RGB-Einschaltzeit." },
+        "off_ms": { "name": "Ausschaltzeit", "description": "Blink-Ausschaltzeit in Millisekunden. Standard ist die Number-Entität RGB-Ausschaltzeit." },
+        "work_ms": { "name": "Dauer", "description": "Gesamtlaufzeit in Millisekunden. Standard ist die Number-Entität RGB-Dauer." }
+      }
+    },
+    "clear_screen": {
+      "name": "Bildschirm löschen",
+      "description": "Löscht das E-Ink-Panel (Kommando 0xA504)."
+    },
+    "set_image": {
+      "name": "Bild setzen",
+      "description": "Rendert eine Bilddatei und überträgt sie auf das Panel. Experimentell: Das Pixelformat ist vom Hersteller nicht dokumentiert.",
+      "fields": {
+        "path": { "name": "Dateipfad", "description": "Pfad zum Bild. Muss in einem erlaubten Verzeichnis liegen." },
+        "rotate": { "name": "Drehung", "description": "Bild vor dem Einpassen drehen." },
+        "invert": { "name": "Invertieren", "description": "Schwarz und Weiß bei 1-Bit-Panels tauschen." },
+        "dither": { "name": "Dithering", "description": "Floyd-Steinberg-Dithering anwenden." }
+      }
+    }
+  }
+}
