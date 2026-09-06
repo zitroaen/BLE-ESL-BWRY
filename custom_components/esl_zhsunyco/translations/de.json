@@ -75,6 +75,9 @@
     "button": {
       "clear_screen": {
         "name": "Bildschirm löschen"
+      },
+      "debug_probe": {
+        "name": "Diagnose-Probe"
       }
     },
     "light": {

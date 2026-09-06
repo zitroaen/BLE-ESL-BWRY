@@ -349,19 +349,30 @@ class ESLDevice:
         _LOGGER.debug("%s image uploaded (%d bytes)", self.address, len(data))
 
     async def async_probe(self) -> dict[str, Any]:
-        """Connect and collect a full diagnostic report."""
-        ble_device = self._ble_device()
-        async with self._lock:
-            client = await establish_connection(
-                BleakClientWithServiceCache,
-                ble_device,
-                self.address,
-                timeout=CONNECT_TIMEOUT,
-            )
-            try:
-                report = await protocol.probe_device(client)
-            finally:
-                await client.disconnect()
+        """Collect a full diagnostic report.
+
+        Never raises: a connection that fails is the very thing we want to
+        see, and the advertisement section stays useful without one.
+        """
+        report: dict[str, Any] = {}
+        try:
+            ble_device = self._ble_device()
+            async with self._lock:
+                client = await establish_connection(
+                    BleakClientWithServiceCache,
+                    ble_device,
+                    self.address,
+                    timeout=CONNECT_TIMEOUT,
+                )
+                try:
+                    report = await protocol.probe_device(client)
+                finally:
+                    await client.disconnect()
+            report["connection"] = "ok"
+        except Exception as err:  # noqa: BLE001 - the report is the deliverable
+            _LOGGER.warning("Probe of %s could not connect: %s", self.address, err)
+            report["connection"] = "failed"
+            report["connection_error"] = f"{type(err).__name__}: {err}"
 
         report["address"] = self.address
         report["model"] = self.model

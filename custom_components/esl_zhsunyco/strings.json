@@ -75,6 +75,9 @@
     "button": {
       "clear_screen": {
         "name": "Clear screen"
+      },
+      "debug_probe": {
+        "name": "Debug probe"
       }
     },
     "light": {

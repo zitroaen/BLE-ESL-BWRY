@@ -53,7 +53,7 @@ async def test_entities_are_created(
         by_domain[entity.domain] = by_domain.get(entity.domain, 0) + 1
 
     assert by_domain.get("sensor") == 5
-    assert by_domain.get("button") == 1
+    assert by_domain.get("button") == 2
     assert by_domain.get("light") == 1
     assert by_domain.get("number") == 3
 

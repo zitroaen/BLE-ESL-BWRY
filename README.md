@@ -135,20 +135,35 @@ gebündelt, damit sie leicht korrigierbar sind:
 
 ### Diagnose-Probe
 
-Der schnellste Weg, ein Problem einzugrenzen: Dienst
-`esl_zhsunyco.debug_probe` auf das Gerät aufrufen. Er verbindet sich, listet
+Der schnellste Weg, ein Problem einzugrenzen: am Gerät den Button
+**Diagnose-Probe** drücken (alternativ der Dienst
+`esl_zhsunyco.debug_probe`). Er verbindet sich, listet
 die komplette GATT-Tabelle mit allen Charakteristiken und deren Properties
 auf, versucht das Unlock und liest anschließend Version, Batterie und Status
 im Rohformat. Das Ergebnis erscheint als Benachrichtigung und im Log.
 
-Besonders aussagekräftig ist dabei `reads.status.error_meaning`:
-`unlock_failed` bedeutet, dass die Challenge/Response abgelehnt wurde, alles
-andere heißt, dass das Unlock funktioniert hat.
+Der Button funktioniert auch dann, wenn alle anderen Entitäten
+„nicht verfügbar" sind — er scheitert nicht, sondern meldet den Fehlgrund
+unter `connection_error`.
+
+Besonders aussagekräftig sind zwei Felder:
+
+- `connection` — `ok` heißt, Verbindung und GATT-Zugriff funktionieren.
+- `reads.status.error_meaning` — `unlock_failed` bedeutet, dass die
+  Challenge/Response abgelehnt wurde; alles andere heißt, dass das Unlock
+  funktioniert hat.
 
 Zusätzlich liefert **Einstellungen → Geräte & Dienste → Zhsunyco ESL →
 Diagnose herunterladen** eine JSON-Datei mit dem rohen Advertisement, der
 Feld-für-Feld-Zerlegung und den Batteriewerten unter allen plausiblen
 Dekodierregeln.
+
+### Zwei ESL-Integrationen gleichzeitig
+
+Ein BLE-Label kann immer nur **eine** Verbindung gleichzeitig annehmen. Wenn
+eine zweite Integration (z. B. `esl_tag`) dasselbe Label anspricht, greifen
+beide abwechselnd zu und Kommandos gehen verloren. Falls beide installiert
+sind: die andere Integration für das Label testweise deaktivieren.
 
 ### LED und Bildschirm löschen bleiben wirkungslos
 

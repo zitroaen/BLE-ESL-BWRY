@@ -85,3 +85,52 @@ async def test_write_mode_option_is_applied(
     )
     await hass.async_block_till_done()
     assert device.write_response is True
+
+
+async def test_probe_button_reports_connection_failure(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """A label that cannot be reached must produce a report, not an exception."""
+    from homeassistant.components import persistent_notification
+
+    device = await _setup(hass, config_entry)
+
+    await hass.services.async_call(
+        "button",
+        "press",
+        {"entity_id": "button.esl_66_66_54_20_00_55_debug_probe"},
+        blocking=True,
+    )
+
+    assert device.state.last_probe is not None
+    assert device.state.last_probe["connection"] == "failed"
+
+    notifications = persistent_notification._async_get_or_create_notifications(hass)
+    assert any("ESL probe" in item["title"] for item in notifications.values())
+
+
+async def test_probe_button_is_always_pressable(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """The diagnostic button must not go unavailable with the label."""
+    await _setup(hass, config_entry)
+    state = hass.states.get("button.esl_66_66_54_20_00_55_debug_probe")
+    assert state is not None
+    assert state.state != "unavailable"
+
+
+async def test_probe_includes_advertisement_without_connection(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """Advertisement data stays useful even when connecting fails."""
+    device = await _setup(hass, config_entry)
+
+    payload = struct.pack("<HHHHH", 0xAB01, 0x0102, 0x0203, 0x0304, 29200)
+    device._advert_received(
+        SimpleNamespace(rssi=-55, manufacturer_data={MANUFACTURER_ID: payload}), None
+    )
+    await hass.async_block_till_done()
+
+    report = await device.async_probe()
+    assert report["connection"] == "failed"
+    assert report["advertisement"]["raw_by_company_id"]["0xBBAA"] == payload.hex(" ")
