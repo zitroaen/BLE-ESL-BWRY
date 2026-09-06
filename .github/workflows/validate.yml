@@ -47,4 +47,5 @@ jobs:
       - run: pip install -r requirements-test.txt
       - run: python tests/test_protocol.py
       - run: python tests/test_diagnostics.py
+      - run: python tests/test_rle.py
       - run: pytest tests/integration -q

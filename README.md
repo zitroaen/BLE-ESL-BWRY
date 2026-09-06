@@ -109,6 +109,27 @@ data:
 
 `set_image` verlangt, dass der Pfad in `allowlist_external_dirs` liegt.
 
+## Verwandte, aber inkompatible Firmware
+
+Unter dem Namen „Zhsunyco" werden **zwei völlig unterschiedliche
+BLE-Protokolle** verkauft. Diese Integration spricht ausschließlich das
+erste:
+
+| | WOLINK (diese Integration) | easyTag |
+|---|---|---|
+| Service/Charakteristiken | `…-4C53-4545-4C42-4B4E494C4F57` | `00001523/1525/1526-1212-efde-…` |
+| Authentifizierung | AES-128-ECB Challenge/Response | XOR-Schlüssel aus der MAC |
+| Kommandos | `0xA500`–`0xA509` | 20-Byte-Header + 204-Byte-Pakete, CRC-16/ARC |
+| Kennung | keine | ASCII `easyTag` / `eTag-CO` |
+| Rückmeldung | keine | Notify-Charakteristik |
+
+Für die easyTag-Variante gibt es eine eigene Implementierung:
+[roxburghm/zhsunyco-esl](https://github.com/roxburghm/zhsunyco-esl).
+
+Die **Diagnose-Probe erkennt beide** und meldet unter `protocol_family`,
+welche das Label tatsächlich spricht. Steht dort `easytag_xor`, ist diese
+Integration die falsche Software für das Gerät.
+
 ## Bekannte Unsicherheiten
 
 Diese Punkte sind im Herstellerdokument **nicht** spezifiziert und daher im
@@ -119,8 +140,11 @@ gebündelt, damit sie leicht korrigierbar sind:
   Packung in `imaging.py` nimmt für BWRY-Panels 2 Bit pro Pixel mit der
   Palettenreihenfolge Schwarz/Weiß/Gelb/Rot an, für andere Panels 1 Bit pro
   Pixel. Anpassbar über `BWRY_PALETTE` und `MONO_BLACK_BIT`.
-- **Blockkomprimierung** (Abschn. 3.3/3.9) ist nicht beschrieben; es wird
-  ausschließlich unkomprimiert über `0xA501` übertragen.
+- **Blockkomprimierung** (Abschn. 3.3/3.9) ist nicht beschrieben. In
+  `rle.py` liegt der RLE-Codec der easyTag-Firmware desselben Herstellers als
+  begründeter Kandidat — mit Encoder, Decoder und Round-Trip-Tests, aber
+  ungetestet gegen diese Hardware. Übertragen wird bisher ausschließlich
+  unkomprimiert über `0xA501`.
 - **Byte-Reihenfolge** von `on_ms`/`off_ms`/`work_ms` (Abschn. 3.8) und der
   Bildgröße (Abschn. 3.2) — angenommen wird Little Endian, passend zum
   4-Byte-Datenzeiger.

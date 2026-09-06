@@ -154,6 +154,57 @@ def test_probe_reports_missing_characteristics():
     assert "error" in report["reads"]["battery"]
 
 
+def test_probe_detects_wolink_family():
+    """Our own stack must be recognised as supported."""
+    import asyncio
+
+    client = ProbeClient(
+        {
+            const.UUID_SECURITY: bytes(range(16)),
+            const.UUID_VERSION: struct.pack("<HHHH", 1, 2, 3, 4),
+            const.UUID_BATTERY: b"\x10\x72",
+            const.UUID_STATUS: bytes((0, 0)),
+        }
+    )
+    report = asyncio.run(protocol.probe_device(client))
+
+    family = report["protocol_family"]
+    assert family["detected"] == const.PROTOCOL_WOLINK
+    assert family["supported_by_this_integration"] is True
+
+
+def test_probe_detects_easytag_family():
+    """A label running the other vendor stack must be called out clearly."""
+    import asyncio
+
+    client = ProbeClient({})
+    chars = [
+        ProbeClient._Char(const.EASYTAG_WRITE, ["write"], 0),
+        ProbeClient._Char(const.EASYTAG_NOTIFY, ["notify"], 1),
+    ]
+    client.services = ProbeClient._Collection(
+        [ProbeClient._Service(const.EASYTAG_SERVICE, chars)]
+    )
+
+    report = asyncio.run(protocol.probe_device(client))
+    family = report["protocol_family"]
+
+    assert family["detected"] == const.PROTOCOL_EASYTAG
+    assert family["supported_by_this_integration"] is False
+    assert "roxburghm" in family["note"]
+
+
+def test_probe_reports_unknown_family():
+    """Neither stack present must not be reported as one of them."""
+    import asyncio
+
+    client = ProbeClient({})
+    client.services = ProbeClient._Collection([])
+    report = asyncio.run(protocol.probe_device(client))
+
+    assert report["protocol_family"]["detected"] == const.PROTOCOL_UNKNOWN
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

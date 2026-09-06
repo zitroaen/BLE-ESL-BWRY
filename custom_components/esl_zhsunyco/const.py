@@ -40,6 +40,20 @@ UUID_SECURITY: Final = "33323032-4c53-4545-4c42-4b4e494c4f57"  # sec. 2
 UUID_STATUS: Final = "34323032-4c53-4545-4c42-4b4e494c4f57"  # sec. VI
 UUID_BATTERY: Final = "35323032-4c53-4545-4c42-4b4e494c4f57"  # sec. V
 
+# --- A second, unrelated protocol family ---------------------------------
+# Labels sold under the same vendor name also ship an "easyTag" firmware with
+# a completely different stack: Nordic style UUIDs, a XOR key derived from the
+# MAC and 20/204 byte framed packets instead of AES and 0xA5xx commands.
+# Documented at https://github.com/roxburghm/zhsunyco-esl. This integration
+# does not speak it, but the probe detects it so the wrong driver is obvious.
+EASYTAG_SERVICE: Final = "00001523-1212-efde-1523-785feabcd123"
+EASYTAG_WRITE: Final = "00001525-1212-efde-1523-785feabcd123"
+EASYTAG_NOTIFY: Final = "00001526-1212-efde-1523-785feabcd123"
+
+PROTOCOL_WOLINK: Final = "wolink_aes"
+PROTOCOL_EASYTAG: Final = "easytag_xor"
+PROTOCOL_UNKNOWN: Final = "unknown"
+
 # --- Security (sec. 2) ----------------------------------------------------
 AES_KEY: Final = bytes(
     (

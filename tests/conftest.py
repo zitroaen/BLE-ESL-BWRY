@@ -43,3 +43,13 @@ def load_modules() -> tuple[types.ModuleType, types.ModuleType, types.ModuleType
     protocol = _load("protocol", COMPONENT / "protocol.py", package)
     imaging = _load("imaging", COMPONENT / "imaging.py", package)
     return const, protocol, imaging
+
+
+def load_rle():
+    """Load the RLE module on its own; it has no dependencies."""
+    package = sys.modules.get("esl_pkg")
+    if package is None:
+        package = types.ModuleType("esl_pkg")
+        package.__path__ = [str(COMPONENT)]
+        sys.modules["esl_pkg"] = package
+    return _load("rle", COMPONENT / "rle.py", package)

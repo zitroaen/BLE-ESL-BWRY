@@ -27,9 +27,15 @@ from .const import (
     CMD_MULTI_REFRESH,
     CMD_MULTI_STORE,
     CMD_RGB,
+    EASYTAG_NOTIFY,
+    EASYTAG_SERVICE,
+    EASYTAG_WRITE,
     ERROR_CODES,
     MULTI_SLOT_MAX,
     MULTI_SLOT_MIN,
+    PROTOCOL_EASYTAG,
+    PROTOCOL_UNKNOWN,
+    PROTOCOL_WOLINK,
     UUID_BATTERY,
     UUID_COMMAND,
     UUID_SECURITY,
@@ -42,6 +48,15 @@ _LOGGER = logging.getLogger(__name__)
 # Conservative default when the client does not expose an MTU.
 _FALLBACK_MTU = 23
 _ATT_HEADER = 3
+
+# Timing for bulk uploads. These are the values the easyTag driver from the
+# same vendor needed to avoid overrunning the label's buffer
+# (https://github.com/roxburghm/zhsunyco-esl); the BLE Display API document
+# gives no guidance at all, so the conservative numbers are used here too.
+CHUNK_DELAY_S = 0.020
+CHUNK_DELAY_EVERY_5TH_S = 0.003
+PRE_DATA_DELAY_S = 0.5
+PRE_REFRESH_DELAY_S = 0.5
 
 
 class ESLProtocolError(Exception):
@@ -182,11 +197,18 @@ async def _store_blocks(
     body = prefix + data
     # command (2) + pointer (4)
     size = _chunk_size(client, len(command) + 4)
-    for offset in range(0, len(body), size):
+
+    # Let the label settle after the unlock before the first bulk write.
+    await asyncio.sleep(PRE_DATA_DELAY_S)
+
+    for number, offset in enumerate(range(0, len(body), size), start=1):
         chunk = body[offset : offset + size]
         await send_command(client, command + struct.pack("<I", offset) + chunk)
         # Give the label time to write into flash between chunks.
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(CHUNK_DELAY_S)
+        if number % 5 == 0:
+            await asyncio.sleep(CHUNK_DELAY_EVERY_5TH_S)
+
     _LOGGER.debug("Uploaded %d bytes in %d byte chunks", len(body), size)
 
 
@@ -200,6 +222,7 @@ async def send_image(
     and is considered experimental.
     """
     await _store_blocks(client, CMD_IMAGE_STORE, data)
+    await asyncio.sleep(PRE_REFRESH_DELAY_S)
     command = CMD_IMAGE_REFRESH_COMP if compressed else CMD_IMAGE_REFRESH_RAW
     await send_command(client, command + struct.pack("<I", len(data)))
 
@@ -337,6 +360,11 @@ async def probe_device(client: BleakClient) -> dict[str, object]:
         services.append({"uuid": str(service.uuid), "characteristics": characteristics})
     report["services"] = services
 
+    # Which protocol family is this actually? Labels from the same vendor
+    # ship two incompatible stacks, and pointing this driver at the other one
+    # produces exactly the symptoms of a broken command encoding.
+    report["protocol_family"] = detect_protocol_family(client)
+
     known = {
         "security": UUID_SECURITY,
         "command": UUID_COMMAND,
@@ -398,3 +426,40 @@ async def probe_device(client: BleakClient) -> dict[str, object]:
 
     report["mtu_size"] = getattr(client, "mtu_size", None)
     return report
+
+
+def detect_protocol_family(client: BleakClient) -> dict[str, object]:
+    """Work out which of the two vendor stacks this label actually speaks.
+
+    Both are sold as "Zhsunyco". This integration implements the WOLINK stack
+    from the BLE Display API document (AES unlock, 0xA5xx commands). The other
+    is the easyTag stack (Nordic style UUIDs, XOR keyed off the MAC, framed
+    20/204 byte packets), which needs a completely different driver.
+    """
+
+    def present(uuid: str) -> bool:
+        return client.services.get_characteristic(uuid) is not None
+
+    wolink = present(UUID_SECURITY) and present(UUID_COMMAND)
+    easytag = present(EASYTAG_WRITE) and present(EASYTAG_NOTIFY)
+
+    if wolink:
+        family = PROTOCOL_WOLINK
+    elif easytag:
+        family = PROTOCOL_EASYTAG
+    else:
+        family = PROTOCOL_UNKNOWN
+
+    return {
+        "detected": family,
+        "supported_by_this_integration": family == PROTOCOL_WOLINK,
+        "wolink_characteristics_present": wolink,
+        "easytag_characteristics_present": easytag,
+        "easytag_service_uuid": EASYTAG_SERVICE,
+        "note": (
+            "easytag_xor needs a different driver, see "
+            "https://github.com/roxburghm/zhsunyco-esl"
+        )
+        if family == PROTOCOL_EASYTAG
+        else "",
+    }
