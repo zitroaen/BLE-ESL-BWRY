@@ -303,6 +303,10 @@ class ESLDevice:
     @property
     def available(self) -> bool:
         """True when the label was heard from recently or last poll worked."""
+        # A connected peripheral stops advertising, so a held connection has
+        # to count as available or the entities would drop out mid-session.
+        if self.connected:
+            return True
         if (
             self.state.last_advert is not None
             and dt_util.utcnow() - self.state.last_advert < ADVERT_TIMEOUT
@@ -586,6 +590,14 @@ class ESLDevice:
             await protocol.refresh_multi(client, index_a, index_b)
 
 
+async def _async_close(client: BleakClientWithServiceCache, address: str) -> None:
+    """Close a connection without letting teardown failures surface."""
+    try:
+        await client.disconnect()
+    except Exception as err:  # noqa: BLE001 - teardown is best effort
+        _LOGGER.debug("Disconnect of %s failed: %s", address, err)
+
+
 class _ESLConnection:
     """Async context manager providing an unlocked connection.
 
@@ -607,15 +619,17 @@ class _ESLConnection:
     async def __aenter__(self) -> BleakClientWithServiceCache:
         device = self._device
         await device._lock.acquire()
-        device._cancel_linger_timer()
-
-        # Reuse a live connection; the unlock is per connection and still valid.
-        if (client := device._client) is not None and client.is_connected:
-            _LOGGER.debug("%s reusing the open connection", device.address)
-            return client
-        device._client = None
-
+        client: BleakClientWithServiceCache | None = None
         try:
+            device._cancel_linger_timer()
+
+            # Reuse a live connection; the unlock is per connection and holds.
+            existing = device._client
+            if existing is not None and existing.is_connected:
+                _LOGGER.debug("%s reusing the open connection", device.address)
+                return existing
+            device._client = None
+
             ble_device = await device._async_wait_for_connectable(self._wait)
             client = await establish_connection(
                 BleakClientWithServiceCache,
@@ -624,19 +638,21 @@ class _ESLConnection:
                 timeout=CONNECT_TIMEOUT,
                 disconnected_callback=device._on_disconnected,
             )
-        except Exception:
-            device._lock.release()
-            raise
-
-        try:
             await protocol.unlock(client)
-        except Exception:
-            await client.disconnect()
+            device._client = client
+            return client
+        except BaseException:
+            # BaseException, not Exception: asyncio.CancelledError is not an
+            # Exception, so an outer timeout used to leave the lock held for
+            # good and every later command hung. Worse, a connection opened
+            # just before the cancellation stayed up, and a connected label
+            # stops advertising, so the whole integration went dark.
+            device._client = None
+            if client is not None:
+                # As a task, so it still runs while this one is cancelled.
+                device.hass.async_create_task(_async_close(client, device.address))
             device._lock.release()
             raise
-
-        device._client = client
-        return client
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
         device = self._device

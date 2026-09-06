@@ -290,6 +290,22 @@ Diagnose herunterladen** eine JSON-Datei mit dem rohen Advertisement, der
 Feld-für-Feld-Zerlegung und den Batteriewerten unter allen plausiblen
 Dekodierregeln.
 
+### Alle Entitäten „nicht verfügbar", keine Advertisements mehr
+
+Betrifft **0.9.0**. Ein Diagnose-Download hat dort automatisch eine Probe
+gestartet; lief deren Timeout ab, blieb eine interne Sperre dauerhaft
+gehalten und eine eventuell schon offene BLE-Verbindung bestehen. Ein
+verbundenes BLE-Gerät **sendet keine Advertisements mehr** — die Integration
+wurde dadurch blind und alle Entitäten fielen aus.
+
+Behoben in 0.9.1. Falls es noch auftritt: **Integration neu laden**
+(Einstellungen → Geräte & Dienste → ⋮ → Neu laden). Das schließt eine
+hängende Verbindung sauber, danach kommen die Advertisements zurück.
+
+Der Diagnose-Download baut seit 0.9.1 **keine Verbindung mehr auf**. Für
+einen Probe-Bericht den Button **Diagnose-Probe** verwenden; das Ergebnis
+landet dann auch in der Diagnose-Datei.
+
 ### Das Label reagiert nicht auf Kommandos
 
 Ein Schreibvorgang auf die Command-Charakteristik meldet keinen Fehler,

@@ -143,17 +143,21 @@ async def test_probe_includes_advertisement_without_connection(
     assert report["advertisement"]["raw_by_company_id"]["0xBBAA"] == payload.hex(" ")
 
 
-async def test_diagnostics_runs_a_probe_when_none_is_cached(
+async def test_diagnostics_points_at_the_probe_button(
     hass: HomeAssistant, hass_client, config_entry, mock_bluetooth
 ) -> None:
-    """Downloading diagnostics must not omit the probe section."""
+    """Diagnostics must not connect, but must say how to get a probe.
+
+    It used to run a probe automatically, which turned a passive looking
+    download into an active connection attempt. See test_cancellation for the
+    assertion that no connection is opened.
+    """
     device = await _setup(hass, config_entry)
     assert device.state.last_probe is None
 
     result = await get_diagnostics_for_config_entry(hass, hass_client, config_entry)
 
-    assert result["last_probe"] is not None
-    assert result["last_probe"]["connection"] == "failed"
+    assert "Debug probe button" in result["last_probe"]
 
 
 async def test_debug_command_rejects_non_hex(

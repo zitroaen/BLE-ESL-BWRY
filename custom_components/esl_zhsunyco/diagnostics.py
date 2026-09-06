@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -17,11 +16,14 @@ _LOGGER = logging.getLogger(__name__)
 
 TO_REDACT = {"address"}
 
-# A probe needs the label to be awake. The wait budget is passed into the
-# probe so it reports being asleep cleanly, instead of being cut off from
-# outside and leaving a bare timeout; the outer guard is only a backstop.
-PROBE_WAIT_S = 20
-PROBE_TIMEOUT = PROBE_WAIT_S + 15.0
+# Downloading diagnostics deliberately does NOT connect. It used to run a
+# probe automatically, which was an active operation behind a passive looking
+# action: it occupied a proxy connection slot, kept the label connected so it
+# stopped advertising, and its timeout cancelled the attempt mid-connect. Use
+# the "Debug probe" button when a probe is wanted; the result is cached here.
+NO_PROBE_HINT = (
+    "no probe cached; press the Debug probe button on the device to collect one"
+)
 
 
 async def async_get_config_entry_diagnostics(
@@ -30,17 +32,6 @@ async def async_get_config_entry_diagnostics(
     """Return everything needed to debug a label without shell access."""
     device: ESLDevice = entry.runtime_data
     state = device.state
-
-    # Run a probe if none is cached. Downloading diagnostics is the step a
-    # user actually performs, so it should not silently omit the one section
-    # that answers which protocol the label speaks.
-    if state.last_probe is None:
-        try:
-            async with asyncio.timeout(PROBE_TIMEOUT):
-                await device.async_probe(wait=PROBE_WAIT_S)
-        except TimeoutError:
-            _LOGGER.warning("Probe for diagnostics timed out after %ss", PROBE_TIMEOUT)
-            state.last_probe = {"error": f"probe timed out after {PROBE_TIMEOUT}s"}
 
     return {
         "entry": {
@@ -86,5 +77,5 @@ async def async_get_config_entry_diagnostics(
         },
         "battery_candidate_meanings": BATTERY_CANDIDATES,
         "last_command": state.last_command,
-        "last_probe": state.last_probe,
+        "last_probe": state.last_probe if state.last_probe else NO_PROBE_HINT,
     }
