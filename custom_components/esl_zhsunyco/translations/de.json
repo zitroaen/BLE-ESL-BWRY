@@ -37,13 +37,11 @@
         "data": {
           "scan_interval_min": "Abfrageintervall (0 deaktiviert die Abfrage)",
           "write_mode": "Schreibmodus für Kommandos",
-          "linger_s": "Verbindung offen halten (Sekunden)",
-          "unlock_variant": "Unlock-Berechnung"
+          "linger_s": "Verbindung offen halten (Sekunden)"
         },
         "data_description": {
           "write_mode": "Wie Kommandos über Bluetooth geschrieben werden. Probiere 'Ohne Bestätigung', wenn LED und Bildschirm löschen wirkungslos bleiben, die Sensoren aber aktualisieren.",
-          "linger_s": "Wie lange die Bluetooth-Verbindung nach einem Kommando gehalten wird. Ein neuer Verbindungsaufbau bedeutet erneutes Warten auf ein Advertisement, was Minuten dauert — ein kurzes Offenhalten macht Folgekommandos daher sofort wirksam. 0 trennt sofort.",
-          "unlock_variant": "Wie die AES-Challenge beantwortet wird. Nur ändern, wenn der Unlock-Test eine andere Variante als funktionierend gemeldet hat."
+          "linger_s": "Wie lange die Bluetooth-Verbindung nach einem Kommando gehalten wird. Ein neuer Verbindungsaufbau bedeutet erneutes Warten auf ein Advertisement, was Minuten dauert — ein kurzes Offenhalten macht Folgekommandos daher sofort wirksam. 0 trennt sofort."
         }
       }
     }
@@ -236,20 +234,6 @@
         "preset": {
           "name": "Kandidaten",
           "description": "clear_screen probiert beide dokumentierten Löschwege (0xA504 und 0xA509 mit Index -2). opcode leitet stattdessen Byte-Reihenfolge-Varianten aus dem Opcode-Feld ab."
-        }
-      }
-    },
-    "debug_unlock_sweep": {
-      "name": "Unlock-Varianten testen",
-      "description": "Probiert alle AES-Unlock-Berechnungen in einer Verbindung durch und meldet, welche das Label dazu bringt, auf ein Kommando zu reagieren. Die Hersteller-Doku ist bei der Richtung mehrdeutig, und ein gesperrtes Label ignoriert Writes stillschweigend.",
-      "fields": {
-        "probe_command": {
-          "name": "Test-Kommando",
-          "description": "Kommando nach jedem Unlock-Versuch, als Hex. Bildschirm löschen (A504) ist am leichtesten zu erkennen."
-        },
-        "settle": {
-          "name": "Wartezeit",
-          "description": "Sekunden nach jedem Unlock-Write, bevor das Kommando gesendet wird."
         }
       }
     }

@@ -15,7 +15,10 @@ from io import BytesIO
 _LOGGER = logging.getLogger(__name__)
 
 # Palette for four colour black/white/red/yellow panels. The index is the two
-# bit code written to the panel; the order is unverified.
+# bit code written to the panel. The order is VERIFIED: a calibration image of
+# four equal bands, each filled with one constant 2 bit code, came back off a
+# physical BLE-35BWRY as black, white, yellow, red top to bottom - byte values
+# 0x00, 0x55, 0xAA, 0xFF. See docs/hardware-verified-findings.md section 4.
 BWRY_PALETTE: list[tuple[int, int, int]] = [
     (0, 0, 0),  # 0 black
     (255, 255, 255),  # 1 white

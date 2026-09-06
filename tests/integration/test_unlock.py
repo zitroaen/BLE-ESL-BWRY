@@ -1,4 +1,4 @@
-"""Finding out which AES unlock computation the label actually accepts."""
+"""The AES unlock, and the status bits that report whether it landed."""
 
 from __future__ import annotations
 
@@ -8,31 +8,34 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from custom_components.esl_zhsunyco.const import AES_KEY, UUID_SECURITY, UUID_STATUS
-from custom_components.esl_zhsunyco.protocol import UNLOCK_VARIANTS
+from custom_components.esl_zhsunyco.protocol import unlock
 
 from .conftest import attach_services
 
 CHALLENGE = bytes(range(16))
 
 
-def _expected(variant: str) -> bytes:
-    return UNLOCK_VARIANTS[variant](CHALLENGE)
+def _encrypted(challenge: bytes = CHALLENGE) -> bytes:
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    encryptor = Cipher(algorithms.AES(AES_KEY), modes.ECB()).encryptor()
+    return encryptor.update(challenge) + encryptor.finalize()
 
 
 class FakeLabel:
-    """A label that only unlocks for one specific computation.
+    """A label that unlocks only for AES-ECB(challenge) with the vendor key.
 
     Mirrors the documented behaviour: a locked label accepts the unlock write,
     then drops the link on the next write to any other characteristic.
     """
 
-    def __init__(self, accepts: str | None) -> None:
+    def __init__(self, accepts: bool = True) -> None:
         self.is_connected = True
         self.accepts = accepts
         self.unlocked = False
         self.busy = False
         self.commands: list[bytes] = []
-        self.disconnects = 0
+        self.security_writes: list[bytes] = []
         attach_services(self)
 
     def reconnect(self) -> None:
@@ -40,7 +43,6 @@ class FakeLabel:
         self.unlocked = False
 
     async def disconnect(self):
-        self.disconnects += 1
         self.is_connected = False
 
     async def start_notify(self, uuid, cb):
@@ -59,9 +61,8 @@ class FakeLabel:
     async def write_gatt_char(self, uuid, data, response=None):
         payload = bytes(data)
         if uuid == UUID_SECURITY:
-            self.unlocked = self.accepts is not None and payload == _expected(
-                self.accepts
-            )
+            self.security_writes.append(payload)
+            self.unlocked = self.accepts and payload == _encrypted()
             return
         self.commands.append(payload)
         if self.unlocked:
@@ -80,15 +81,62 @@ async def _setup(hass: HomeAssistant, entry):
     return device
 
 
-def _patches(client):
+async def test_unlock_encrypts_the_challenge_with_the_vendor_key() -> None:
+    """Verified twice on hardware; nothing else is sent any more.
+
+    Five alternatives used to be tried in turn. They are gone: a wrong one
+    does not merely fail, it makes the label revoke authorisation.
+    """
+    label = FakeLabel()
+    await unlock(label)
+
+    assert label.security_writes == [_encrypted()]
+    assert label.unlocked is True
+    # Not the plaintext, and not the inverse operation.
+    assert label.security_writes[0] != CHALLENGE
+
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    decryptor = Cipher(algorithms.AES(AES_KEY), modes.ECB()).decryptor()
+    decrypted = decryptor.update(CHALLENGE) + decryptor.finalize()
+    assert label.security_writes[0] != decrypted
+
+
+async def test_unlock_rejects_a_challenge_of_the_wrong_length() -> None:
+    """A short read is a protocol error, not something to encrypt anyway."""
+    from custom_components.esl_zhsunyco.protocol import ESLProtocolError
+
+    class ShortChallenge(FakeLabel):
+        async def read_gatt_char(self, uuid):
+            if uuid == UUID_SECURITY:
+                return bytes(8)
+            return await super().read_gatt_char(uuid)
+
+    label = ShortChallenge()
+    try:
+        await unlock(label)
+    except ESLProtocolError as err:
+        assert "8" in str(err)
+    else:
+        raise AssertionError("a short challenge must not be accepted")
+    assert label.security_writes == []
+
+
+async def test_a_rejected_unlock_is_noticed_before_any_command(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """The status byte answers this directly, so a command need not be risked."""
+    device = await _setup(hass, config_entry)
+    label = FakeLabel(accepts=False)
+
     async def fake_wait(_self, wait=180):
         return object()
 
     async def fake_establish(*args, **kwargs):
-        client.reconnect()
-        return client
+        label.reconnect()
+        return label
 
-    return (
+    with (
         patch(
             "custom_components.esl_zhsunyco.device.ESLDevice."
             "_async_wait_for_connectable",
@@ -98,153 +146,46 @@ def _patches(client):
             "custom_components.esl_zhsunyco.device.establish_connection",
             new=fake_establish,
         ),
-        patch("custom_components.esl_zhsunyco.device.STATUS_POLL_S", 0),
-        patch("custom_components.esl_zhsunyco.device.STATUS_WATCH_S", 0.01),
-    )
+    ):
+        async with device.connection():
+            pass
+
+    assert device.state.unlock_verified is False
+    assert device.state.last_unlock_status["looks_locked"] is True
+    # No command was sent to find this out.
+    assert label.commands == []
 
 
-async def _sweep(hass, device, client):
-    import contextlib
-
-    with contextlib.ExitStack() as stack:
-        for ctx in _patches(client):
-            stack.enter_context(ctx)
-        return await device.async_unlock_sweep(settle=0)
-
-
-async def test_sweep_finds_the_documented_encrypt_variant(
+async def test_an_accepted_unlock_is_recorded_as_verified(
     hass: HomeAssistant, config_entry, mock_bluetooth
 ) -> None:
-    """A label behaving as documented must be identified as such."""
+    """The counterpart, so the check cannot pass by always reporting failure."""
     device = await _setup(hass, config_entry)
-    report = await _sweep(hass, device, FakeLabel(accepts="encrypt"))
+    label = FakeLabel(accepts=True)
 
-    assert report["working_variant"] == "encrypt"
-    assert report["results"][0]["unlock_accepted"] is True
+    async def fake_wait(_self, wait=180):
+        return object()
 
+    async def fake_establish(*args, **kwargs):
+        label.reconnect()
+        return label
 
-async def test_sweep_finds_decrypt_when_the_document_is_wrong(
-    hass: HomeAssistant, config_entry, mock_bluetooth
-) -> None:
-    """The whole point: the document says encryption, it may mean the inverse."""
-    device = await _setup(hass, config_entry)
-    report = await _sweep(hass, device, FakeLabel(accepts="decrypt"))
+    with (
+        patch(
+            "custom_components.esl_zhsunyco.device.ESLDevice."
+            "_async_wait_for_connectable",
+            new=fake_wait,
+        ),
+        patch(
+            "custom_components.esl_zhsunyco.device.establish_connection",
+            new=fake_establish,
+        ),
+    ):
+        async with device.connection():
+            pass
 
-    assert report["working_variant"] == "decrypt"
-    by_variant = {item["variant"]: item for item in report["results"]}
-    assert by_variant["encrypt"]["unlock_accepted"] is False
-    assert by_variant["decrypt"]["unlock_accepted"] is True
-
-
-async def test_sweep_reports_when_nothing_unlocks(
-    hass: HomeAssistant, config_entry, mock_bluetooth
-) -> None:
-    """No variant working is a finding too, not a silent pass."""
-    device = await _setup(hass, config_entry)
-    report = await _sweep(hass, device, FakeLabel(accepts=None))
-
-    assert report["working_variant"] is None
-    assert "no unlock variant was accepted" in report["conclusion"]
-    assert len(report["results"]) == len(UNLOCK_VARIANTS)
-
-
-async def test_every_variant_gets_its_own_connection(
-    hass: HomeAssistant, config_entry, mock_bluetooth
-) -> None:
-    """Each variant must get a connection of its own.
-
-    A rejected unlock drops the link, so sharing one connection would only
-    ever test the first variant.
-    """
-    device = await _setup(hass, config_entry)
-    label = FakeLabel(accepts="encrypt_reversed")
-    report = await _sweep(hass, device, label)
-
-    # encrypt and decrypt come first and are rejected; each must still have
-    # been given a working connection of its own.
-    tried = [item["variant"] for item in report["results"]]
-    assert tried[:3] == ["encrypt", "decrypt", "encrypt_reversed"]
-    assert report["working_variant"] == "encrypt_reversed"
-
-    by_variant = {item["variant"]: item for item in report["results"]}
-    assert by_variant["encrypt"]["connected_after_command"] is False
-    assert "dropped the link" in by_variant["encrypt"]["note"]
-
-
-async def test_sweep_stops_at_the_first_working_variant(
-    hass: HomeAssistant, config_entry, mock_bluetooth
-) -> None:
-    """No point reconnecting for the rest once one works."""
-    device = await _setup(hass, config_entry)
-    report = await _sweep(hass, device, FakeLabel(accepts="encrypt"))
-
-    assert [item["variant"] for item in report["results"]] == ["encrypt"]
-
-
-async def test_sweep_records_the_challenge_and_every_response(
-    hass: HomeAssistant, config_entry, mock_bluetooth
-) -> None:
-    """The report must be checkable by hand afterwards."""
-    device = await _setup(hass, config_entry)
-    report = await _sweep(hass, device, FakeLabel(accepts=None))
-
-    # Each variant now has its own connection, so the challenge is recorded
-    # per attempt rather than once for the sweep.
-    for item in report["results"]:
-        assert item["challenge"] == CHALLENGE.hex(" ")
-        assert item["response"] == _expected(item["variant"]).hex(" ")
-
-
-def test_variants_are_distinct_and_use_the_vendor_key():
-    """Sweeping identical candidates would prove nothing."""
-    responses = {name: fn(CHALLENGE) for name, fn in UNLOCK_VARIANTS.items()}
-    assert len(set(responses.values())) == len(responses)
-    assert all(len(value) == 16 for value in responses.values())
-
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-
-    enc = Cipher(algorithms.AES(AES_KEY), modes.ECB()).encryptor()
-    assert responses["encrypt"] == enc.update(CHALLENGE) + enc.finalize()
-
-    dec = Cipher(algorithms.AES(AES_KEY), modes.ECB()).decryptor()
-    assert responses["decrypt"] == dec.update(CHALLENGE) + dec.finalize()
-    assert responses["encrypt"] != responses["decrypt"]
-
-
-async def test_sweep_separates_the_unlock_from_the_command(
-    hass: HomeAssistant, config_entry, mock_bluetooth
-) -> None:
-    """The real hardware case: the unlock is accepted, the command is not.
-
-    Judging the unlock by whether a command worked would have reported a
-    correct handshake as broken, which is what happened before the status
-    byte turned out to carry a locked indicator.
-    """
-    device = await _setup(hass, config_entry)
-
-    class SilentLabel(FakeLabel):
-        async def write_gatt_char(self, uuid, data, response=None):
-            if uuid == UUID_SECURITY:
-                self.unlocked = self.accepts is not None and bytes(data) == _expected(
-                    self.accepts
-                )
-                return
-            self.commands.append(bytes(data))
-            # Unlocked, but the command encoding is wrong: accepted and
-            # ignored, and crucially the link survives.
-            if not self.unlocked:
-                self.is_connected = False
-
-    report = await _sweep(hass, device, SilentLabel(accepts="encrypt"))
-
-    assert report["working_variant"] == "encrypt"
-    assert report["command_understood"] is False
-    assert "remaining unknown is its encoding" in report["conclusion"]
-
-    entry = report["results"][0]
-    assert entry["unlock_accepted"] is True
-    assert entry["label_reacted"] is False
-    assert entry["connected_after_command"] is True
+    assert device.state.unlock_verified is True
+    assert device.state.last_unlock_status["looks_locked"] is False
 
 
 async def test_locked_status_byte_is_not_reported_as_busy(

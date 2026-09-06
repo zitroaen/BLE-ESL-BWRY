@@ -208,14 +208,22 @@ Alle fünf Charakteristiken liegen unter dem Service
 | Version | `32323032` | 26 | notify, read |
 
 **Die Command-Charakteristik unterstützt nur „Write with Response"** — kein
-Write-without-Response. Der Schreibmodus `auto` wählt damit automatisch das
-Richtige; die Option bleibt nur für abweichende Firmware-Stände erhalten.
+Write-without-Response. Seit 0.19.0 ist `with_response` deshalb der Default
+und `without_response` gar nicht mehr auswählbar; ein Eintrag, der den Wert
+noch gespeichert hat, schreibt mit Response und bekommt eine Warnung ins
+Log.
 
 Alle drei Lese-Charakteristiken können außerdem **notify** — die Doku
 erwähnt das nicht. Bisher ungenutzt, aber der naheliegende Kanal für eine
 Rückmeldung nach dem Bildupload.
 
-MTU: **247 Bytes**, also 238 Byte Nutzdaten pro Chunk.
+MTU: **247 Bytes**. Geschrieben wird trotzdem in **180-Byte-Scheiben** —
+das ist die Größe, mit der drei vollständige Bilder ohne einen einzigen
+Fehlversuch durchgingen; größere Frames sind auf dieser Hardware nie
+probiert worden, und ein Bildupload ist der falsche Ort dafür. Meldet der
+Client gar keine MTU, gilt dieselbe Größe: der frühere Rückfallwert von 23
+(das ATT-Minimum) ließ 14 Nutzbytes übrig und machte aus einem Bild rund
+1262 Writes.
 
 ### Unlock
 
@@ -387,8 +395,17 @@ BluetoothGATTErrorResponse: Insufficient authorization (8)
 ```
 
 Das ist ATT-Fehlercode 0x08 und kommt vom Label selbst. Ein abgelehntes
-Kommando macht also das Unlock zunichte. `a5 04` löst das **nicht** aus —
-ein Hinweis darauf, dass die Byte-Reihenfolge wie dokumentiert stimmt.
+Kommando macht also das Unlock zunichte.
+
+> **Korrektur (0.19.0).** Aus „`a5 04` löst das nicht aus" wurde hier
+> geschlossen, die dokumentierte Byte-Reihenfolge stimme. Das war falsch.
+> Der Messaufbau selbst hat den Fehler erzeugt: `a5 04` stand im Sweep an
+> erster Stelle, `04 a5` kam danach auf **derselben** Verbindung — die das
+> Label zu diesem Zeitpunkt längst gekappt hatte. Ein direkter Lauf über
+> einen lokalen Adapter zeigt das Gegenteil: `00 a5` und `01 a5` haben ein
+> Bild übertragen und das Panel dreimal neu gezeichnet. Kommandos gehen
+> **little endian** raus. Siehe
+> [`docs/hardware-verified-findings.md`](docs/hardware-verified-findings.md).
 
 Daraus folgen zwei Dinge, beide seit 0.17.0 umgesetzt:
 
@@ -406,28 +423,20 @@ das Verhalten eines Geräts, das noch **gesperrt** ist. Die Doku sagt dazu:
 
 > „If it is not unlocked, writing other services will be disconnected"
 
-Der AES-Handshake ist damit der Hauptverdächtige. Unsere Rechnung ist
-verifiziert — dass das **Label sie akzeptiert**, war es nie. Die Doku sagt
-„using the ECB mode AES128 encryption", das ist eine Übersetzung und könnte
-auch die Gegenrichtung meinen.
+Der AES-Handshake war damit lange der Hauptverdächtige — unsere Rechnung
+war verifiziert, dass das **Label sie akzeptiert**, war es nie.
 
-```yaml
-action: esl_zhsunyco.debug_unlock_sweep
-target:
-  device_id: <dein Label>
-```
+**Das ist inzwischen beantwortet: der Handshake stimmt.** Zwei unabhängige
+Messungen belegen ihn — ein Sweep über einen ESPHome-Proxy, bei dem nur
+`encrypt` das Status-Byte entsperrt hinterließ, und ein direkter Lauf, der
+nach dem Unlock `ERR=0` las und danach 98 Kommando-Writes am Stück ohne
+Abbruch durchbrachte.
 
-Probiert alle Varianten durch — `encrypt`, `decrypt`, jeweils mit
-umgekehrter Challenge, `encrypt_then_reverse` und ein reines Echo — und
-schickt nach jeder ein Kommando, während der Status beobachtet wird.
-
-**Jede Variante bekommt eine eigene Verbindung**, weil ein abgelehntes
-Unlock die Verbindung mitnimmt. Der Sweep dauert dadurch **mehrere
-Minuten** (bei einem Advertisement-Intervall von rund einer Minute etwa
-6–7). Sobald eine Variante wirkt, bricht er ab.
-
-Das Ergebnis nennt `working_variant`. Diese lässt sich dann in den Optionen
-unter **Unlock-Berechnung** dauerhaft einstellen.
+Deshalb gibt es seit 0.19.0 **keine Unlock-Varianten mehr**: weder die
+Option „Unlock-Berechnung" noch die Aktion `debug_unlock_sweep`. Eine
+falsche Variante scheitert nicht bloß, sie lässt das Label die
+Autorisierung entziehen — fünf davon vorrätig zu halten war ein Risiko
+ohne Gegenwert. Gesendet wird AES-128-ECB über die gelesene Challenge.
 
 ### Hat das Kommando wirklich etwas bewirkt?
 
@@ -482,21 +491,23 @@ data:
 ```
 
 Standardmäßig (`preset: clear_screen`) werden **beide dokumentierten
-Löschwege** getestet, nicht nur Byte-Varianten eines einzigen:
+Löschwege** getestet, nicht nur Byte-Varianten eines einzigen — in
+Little-Endian zuerst, weil das die gemessene Reihenfolge ist:
 
 | Payload | Herkunft |
 |---|---|
-| `a5 04` | Abschn. 3.7 „Unbind Clear Screen" |
-| `04 a5` | dasselbe, Opcode umgedreht |
-| `a5 09 fe fe` | Abschn. 3.10, beide Ebenen löschen (Index −2) |
-| `a5 09 fe ff` | Abschn. 3.10, nur Ebene A löschen |
-| `a5 09 ff fe` | Abschn. 3.10, nur Ebene B löschen |
-| `09 a5 fe fe` | dasselbe, Opcode umgedreht |
-| `a5 04 00`, `a5 04 00 00` | mit Längenbytes |
+| `04 a5` | Abschn. 3.7 „Unbind Clear Screen", little endian |
+| `09 a5 fe fe` | Abschn. 3.10, beide Ebenen löschen (Index −2) |
+| `09 a5 fe ff` | Abschn. 3.10, nur Ebene A löschen |
+| `09 a5 ff fe` | Abschn. 3.10, nur Ebene B löschen |
+| `04 a5 00`, `04 a5 00 00` | mit Längenbytes |
+| `a5 04`, `a5 09 fe fe` | wie die Doku es schreibt, big endian |
 
 „Unbind" in 3.7 klingt nach Kopplung/Reset — möglicherweise ist gar nicht
-das der normale Löschweg, sondern 3.10 mit Index −2. Mit `preset: opcode`
-lassen sich stattdessen Varianten aus einem beliebigen Opcode ableiten.
+das der normale Löschweg, sondern 3.10 mit Index −2. **Löschen ist als
+einziges Kommando in keiner Byte-Reihenfolge gemessen**, deshalb gibt es
+diesen Sweep überhaupt noch. Mit `preset: opcode` lassen sich stattdessen
+Varianten aus einem beliebigen Opcode ableiten.
 
 Das Ergebnis kommt als Benachrichtigung:
 
@@ -505,7 +516,7 @@ Das Ergebnis kommt als Benachrichtigung:
 - `connected_after: false` → das Label hat nach dieser Variante aufgelegt,
   was ebenfalls eine Reaktion ist
 
-Eigene Kandidaten gehen auch: `payloads: ["a5 04", "04 a5 00 00"]`.
+Eigene Kandidaten gehen auch: `payloads: ["04 a5", "a5 04 00 00"]`.
 
 Das Ergebnis des letzten Kommandos steht außerdem als `last_command` in der
 Diagnose-Datei.
@@ -523,12 +534,23 @@ discovered devices ... last advertisement 262s ago
 ```
 
 Die Integration wartet deshalb seit 0.6.0 auf das nächste Advertisement
-(bis zu 180 s) und verbindet sich innerhalb dieses Fensters. Der **erste**
-Tastendruck kann dadurch spürbar dauern — das ist normal und kein Fehler.
+und verbindet sich innerhalb dieses Fensters. Der **erste** Tastendruck
+kann dadurch spürbar dauern — das ist normal und kein Fehler.
 
-Seit 0.9.0 bleibt die Verbindung danach für 60 Sekunden offen
-(einstellbar in den Optionen, 0 = sofort trennen). Folgekommandos innerhalb
-dieses Fensters wirken **sofort**, weil nicht erneut gewartet werden muss.
+Seit 0.19.0 sind es **bis zu 300 s** statt 180. Mit durchgehendem aktivem
+Scan gemessen: einzelne Fenster von 10–30 s finden das Label bei 20 cm
+Abstand und −53 dBm regelmäßig **nicht**, und direkt nach einer Übertragung
+blieb ein Lauf über 120 s am Stück leer. 180 s lagen damit genau auf der
+beobachteten Streuung.
+
+Seit 0.9.0 bleibt die Verbindung danach offen — seit 0.19.0 für **15
+Sekunden** statt 60 (einstellbar in den Optionen, 0 = sofort trennen).
+Folgekommandos innerhalb dieses Fensters wirken **sofort**, weil nicht
+erneut gewartet werden muss.
+
+Kürzer, weil ein **verbundenes** BLE-Gerät gar nicht mehr advertised: jede
+Sekunde am offenen Link ist eine Sekunde, in der das Label für alles andere
+unsichtbar ist — auch für den Scanner von Home Assistant selbst.
 
 Zum Vergleich: Die Referenzimplementierung
 [roxburghm/zhsunyco-esl](https://github.com/roxburghm/zhsunyco-esl) wartet

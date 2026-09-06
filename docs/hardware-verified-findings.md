@@ -274,6 +274,11 @@ Fehlversuch durch.
 
 Bewusst **nicht** in diesem PR umgesetzt — dieser PR dokumentiert nur.
 
+> **Nachtrag:** Alle sieben sind in **0.19.0** umgesetzt. Der Kommando-Sweep
+> (#2) bleibt erhalten, weil Löschen als einziges Kommando in keiner
+> Byte-Reihenfolge gemessen ist; seine Kandidatenliste führt jetzt
+> Little-Endian an. Der Unlock-Sweep (#7) ist samt Option entfernt.
+
 | # | Datei | Änderung | Belegt durch |
 |---|---|---|---|
 | 1 | `const.py` | Opcodes auf Little-Endian (`b"\x00\xa5"`, `b"\x01\xa5"`, …) | Abschn. 3 |

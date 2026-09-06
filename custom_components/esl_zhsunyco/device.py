@@ -23,12 +23,10 @@ from homeassistant.util import dt as dt_util
 
 from . import protocol
 from .const import (
-    CMD_CLEAR,
     CONF_ADDRESS,
     CONF_LINGER_S,
     CONF_MODEL,
     CONF_SCAN_INTERVAL_MIN,
-    CONF_UNLOCK_VARIANT,
     CONF_WRITE_MODE,
     DEFAULT_LINGER_S,
     DEFAULT_MODEL,
@@ -37,7 +35,6 @@ from .const import (
     DEFAULT_RGB_ON_MS,
     DEFAULT_RGB_WORK_MS,
     DEFAULT_SCAN_INTERVAL_MIN,
-    DEFAULT_UNLOCK_VARIANT,
     DEFAULT_WRITE_MODE,
     DOMAIN,
     ERROR_CODES,
@@ -67,7 +64,13 @@ CONNECT_TIMEOUT = 30.0
 # BleakOutOfConnectionSlotsError no matter how often it is retried. Waiting for
 # the next advertisement and connecting inside that window is what actually
 # works, so commands wait rather than fail.
-ADVERTISEMENT_WAIT_S = 180
+#
+# 300 s, not 180: measured with a continuous active scan at 20 cm and -53 dBm,
+# single windows of 10-30 s regularly missed the label entirely, and one run
+# stayed empty for over 120 s straight after a transfer. 180 s sat right on
+# top of the observed spread. See docs/hardware-verified-findings.md
+# sections 6 and 7.2.
+ADVERTISEMENT_WAIT_S = 300
 
 # The advertisement callback is the normal path. This re-reads the state
 # Home Assistant already holds, so one missed callback cannot leave every
@@ -226,10 +229,18 @@ class ESLDevice:
     def write_response(self) -> bool | None:
         """ATT write type for commands, or None to let bleak decide."""
         mode = self.entry.options.get(CONF_WRITE_MODE, DEFAULT_WRITE_MODE)
+        if mode == WRITE_MODE_NO_RESPONSE:
+            # The command characteristic has no write-without-response
+            # property, so honouring this would only produce a bleak error.
+            _LOGGER.warning(
+                "%s is configured for %s, which this label does not support; "
+                "writing with response instead",
+                self.address,
+                WRITE_MODE_NO_RESPONSE,
+            )
+            return True
         if mode == WRITE_MODE_RESPONSE:
             return True
-        if mode == WRITE_MODE_NO_RESPONSE:
-            return False
         return None
 
     @callback
@@ -718,11 +729,6 @@ class ESLDevice:
         )
         _LOGGER.debug("%s image uploaded (%d bytes)", self.address, len(data))
 
-    @property
-    def unlock_variant(self) -> str:
-        """Which unlock computation to use; the document leaves it ambiguous."""
-        return str(self.entry.options.get(CONF_UNLOCK_VARIANT, DEFAULT_UNLOCK_VARIANT))
-
     async def _async_verify_unlock(self, client) -> None:
         """Check that the label accepted the unlock, and say so if not.
 
@@ -736,10 +742,9 @@ class ESLDevice:
         self.state.last_unlock_status = status
         if not self.state.unlock_verified:
             _LOGGER.warning(
-                "%s: the label rejected the '%s' unlock (status %s). Commands "
+                "%s: the label rejected the unlock (status %s). Commands "
                 "will be ignored and the link dropped on the first write.",
                 self.address,
-                self.unlock_variant,
                 status.get("raw"),
             )
 
@@ -774,107 +779,6 @@ class ESLDevice:
         in the integration uses this path.
         """
         await self.async_command_sweep([payload], response=expect_response)
-
-    async def async_unlock_sweep(
-        self, *, probe_command: bytes | None = None, settle: float = 1.5
-    ) -> dict[str, Any]:
-        """Try each unlock computation and see which one makes the label act.
-
-        This answers the question the arithmetic cannot: our AES result has
-        been verified against the algorithm, never against the label. A label
-        that stays locked accepts the write and then, per the document,
-        "will be disconnected immediately" on any further write.
-
-        That disconnect is why each variant needs its OWN connection. Trying
-        them in one connection only ever tests the first, because a rejected
-        unlock takes the link down with it. Reconnecting means waiting for the
-        label to advertise, so the whole sweep takes several minutes.
-        """
-        from .protocol import UNLOCK_VARIANTS, read_challenge
-
-        if probe_command is None:
-            probe_command = CMD_CLEAR
-
-        results: list[dict[str, Any]] = []
-        report: dict[str, Any] = {
-            "address": self.address,
-            "probe_command": probe_command.hex(" "),
-            "note": (
-                "one connection per variant, because a rejected unlock drops "
-                "the link; expect this to take several minutes"
-            ),
-            "results": results,
-        }
-
-        for name, compute in UNLOCK_VARIANTS.items():
-            entry: dict[str, Any] = {"variant": name}
-            try:
-                # A fresh connection each time: the challenge is per
-                # connection and a rejected unlock kills the previous one.
-                async with self.connection(unlock=False) as client:
-                    challenge = await read_challenge(client)
-                    entry["challenge"] = challenge.hex(" ")
-                    token = compute(challenge)
-                    entry["response"] = token.hex(" ")
-
-                    await client.write_gatt_char(UUID_SECURITY, token)
-                    await asyncio.sleep(settle)
-                    status = await _read_status(client)
-                    entry["status_after_unlock"] = status
-                    entry["connected_after_unlock"] = bool(client.is_connected)
-                    # The decisive signal: the label reports 0x00 in the
-                    # status byte once it accepts the unlock, 0x06 while it
-                    # does not. This does not depend on the command encoding
-                    # being right as well.
-                    entry["unlock_accepted"] = not status.get("looks_locked", True)
-
-                    await protocol.send_command(
-                        client, probe_command, response=self.write_response
-                    )
-                    entry["status_after_command"] = await _watch_status(client)
-                    entry["connected_after_command"] = bool(client.is_connected)
-                    entry["label_reacted"] = bool(
-                        entry["status_after_command"].get("became_busy")
-                    )
-            except Exception as err:  # noqa: BLE001 - report and keep going
-                entry["error"] = f"{type(err).__name__}: {err}"
-                entry["label_reacted"] = False
-
-            # A drop right after the command is the locked-label signature.
-            if entry.get("connected_after_command") is False:
-                entry["note"] = "the label dropped the link after the command"
-            results.append(entry)
-
-            if entry.get("unlock_accepted"):
-                break
-
-            # Make sure the next variant starts from a clean connection.
-            await self._async_disconnect()
-
-        winner = next(
-            (item["variant"] for item in results if item.get("unlock_accepted")), None
-        )
-        reacted = next(
-            (item["variant"] for item in results if item.get("label_reacted")), None
-        )
-        report["working_variant"] = winner
-        report["command_understood"] = reacted is not None
-        report["notifications"] = list(self.state.notifications)
-        if winner and reacted:
-            report["conclusion"] = (
-                f"'{winner}' unlocks the label and the command worked"
-            )
-        elif winner:
-            report["conclusion"] = (
-                f"'{winner}' unlocks the label: the status byte clears and the link "
-                "survives the write. The command itself was not understood, so the "
-                "remaining unknown is its encoding, not the handshake."
-            )
-        else:
-            report["conclusion"] = "no unlock variant was accepted by the label"
-        self.state.last_command = report
-        _LOGGER.warning("ESL unlock sweep %s: %s", self.address, report)
-        return report
 
     async def async_command_sweep(
         self,
@@ -1192,7 +1096,7 @@ class _ESLConnection:
             await device._async_subscribe(client)
 
             if self._unlock:
-                await protocol.unlock(client, device.unlock_variant)
+                await protocol.unlock(client)
                 await device._async_verify_unlock(client)
             device._client = client
             return client

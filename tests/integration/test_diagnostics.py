@@ -14,8 +14,8 @@ from pytest_homeassistant_custom_component.components.diagnostics import (
 from custom_components.esl_zhsunyco.const import (
     CONF_WRITE_MODE,
     MANUFACTURER_ID,
+    WRITE_MODE_AUTO,
     WRITE_MODE_NO_RESPONSE,
-    WRITE_MODE_RESPONSE,
 )
 
 
@@ -63,30 +63,42 @@ async def test_diagnostics_redact_address(
     assert result["entry"]["data"]["address"] == "**REDACTED**"
 
 
-async def test_write_mode_defaults_to_auto(
+async def test_write_mode_defaults_to_with_response(
     hass: HomeAssistant, config_entry, mock_bluetooth
 ) -> None:
-    """Without an explicit option bleak picks the write type."""
+    """The verified transfers all wrote with response, so that is the default."""
     device = await _setup(hass, config_entry)
+    assert device.write_response is True
+
+
+async def test_write_mode_auto_leaves_the_choice_to_bleak(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """Auto is still selectable and still means "no opinion"."""
+    device = await _setup(hass, config_entry)
+
+    hass.config_entries.async_update_entry(
+        config_entry,
+        options={**config_entry.options, CONF_WRITE_MODE: WRITE_MODE_AUTO},
+    )
+    await hass.async_block_till_done()
     assert device.write_response is None
 
 
-async def test_write_mode_option_is_applied(
+async def test_retired_write_mode_falls_back_to_with_response(
     hass: HomeAssistant, config_entry, mock_bluetooth
 ) -> None:
-    """Both explicit write types must reach the protocol layer."""
+    """The command characteristic has no write-without-response property.
+
+    Measured on hardware: it advertises ['read', 'write'] and nothing else,
+    so honouring a stored "without_response" would only produce a bleak
+    error. An entry that still carries it has to keep working.
+    """
     device = await _setup(hass, config_entry)
 
     hass.config_entries.async_update_entry(
         config_entry,
         options={**config_entry.options, CONF_WRITE_MODE: WRITE_MODE_NO_RESPONSE},
-    )
-    await hass.async_block_till_done()
-    assert device.write_response is False
-
-    hass.config_entries.async_update_entry(
-        config_entry,
-        options={**config_entry.options, CONF_WRITE_MODE: WRITE_MODE_RESPONSE},
     )
     await hass.async_block_till_done()
     assert device.write_response is True

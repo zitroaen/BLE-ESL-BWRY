@@ -15,27 +15,37 @@ CONF_MODEL: Final = "model"
 CONF_SCAN_INTERVAL_MIN: Final = "scan_interval_min"
 CONF_WRITE_MODE: Final = "write_mode"
 CONF_LINGER_S: Final = "linger_s"
-CONF_UNLOCK_VARIANT: Final = "unlock_variant"
 
 # The document says the challenge is unlocked with AES-128-ECB "encryption",
 # but that is a translation and the label ignores writes silently when it
 # stays locked, so the alternatives have to be reachable.
-DEFAULT_UNLOCK_VARIANT: Final = "encrypt"
 
 # How long the connection is held open after a command. Reconnecting means
 # waiting for the label to advertise again, which dominates everything else,
 # so a short linger makes a burst of commands feel instant. It does occupy a
 # proxy connection slot and costs the label some battery, hence not forever.
-DEFAULT_LINGER_S: Final = 60
+# How long the connection is held open after a command. It has to be short:
+# a connected BLE device stops advertising entirely, so every second spent
+# lingering is a second in which nothing - not even Home Assistant's own
+# scanner - can see the label. Long enough for a follow-up command in the
+# same burst, short enough not to hide the label.
+# See docs/hardware-verified-findings.md sections 6 and 7.1.
+DEFAULT_LINGER_S: Final = 15
 
 # How commands are written. The document does not say which ATT write type
 # the label expects, and a label that only handles one of them silently
 # ignores the other, so this is exposed as an option.
 WRITE_MODE_AUTO: Final = "auto"
 WRITE_MODE_RESPONSE: Final = "with_response"
+# The command characteristic advertises ['read', 'write'] and nothing else -
+# no write-without-response - so this mode cannot work on this label. Kept
+# only so a config entry that still stores it keeps loading; it is no longer
+# offered and resolves to a write with response. See
+# docs/hardware-verified-findings.md section 1.
 WRITE_MODE_NO_RESPONSE: Final = "without_response"
-WRITE_MODES: Final = (WRITE_MODE_AUTO, WRITE_MODE_RESPONSE, WRITE_MODE_NO_RESPONSE)
-DEFAULT_WRITE_MODE: Final = WRITE_MODE_AUTO
+WRITE_MODES: Final = (WRITE_MODE_AUTO, WRITE_MODE_RESPONSE)
+# The verified transfers all used writes with response.
+DEFAULT_WRITE_MODE: Final = WRITE_MODE_RESPONSE
 
 # Keys used by the pre-HACS prototype, kept only for entry migration.
 LEGACY_CONF_MAC: Final = "mac_address"
@@ -91,16 +101,25 @@ AES_KEY: Final = bytes(
 CHALLENGE_LEN: Final = 16
 
 # --- Commands (sec. 3) ----------------------------------------------------
-CMD_IMAGE_STORE: Final = b"\xa5\x00"  # 3.1  + data pointer 4B + data
-CMD_IMAGE_REFRESH_RAW: Final = b"\xa5\x01"  # 3.2  + picture data size
-CMD_IMAGE_REFRESH_COMP: Final = b"\xa5\x02"  # 3.3  + picture data size
-CMD_MULTI_STORE: Final = b"\xa5\x03"  # 3.9  + data pointer 4B + data
-CMD_CLEAR: Final = b"\xa5\x04"  # 3.7  no payload
-CMD_OTA_SEND: Final = b"\xa5\x05"  # 3.5  + data pointer 4B + data
-CMD_OTA_UPDATE: Final = b"\xa5\x06"  # 3.6  + size 4B + crc16 2B
-CMD_OTA_ERASE: Final = b"\xa5\x07"  # 3.4  no payload, wait 1s
-CMD_RGB: Final = b"\xa5\x08"  # 3.8  + r + g + b + on2 + off2 + work4
-CMD_MULTI_REFRESH: Final = b"\xa5\x09"  # 3.10 + index A 1B + index B 1B
+# The document writes these as "0xA500", "0xA504" and so on without saying
+# how the two bytes reach the wire. They go out LITTLE ENDIAN: the low byte
+# first, so 0xA500 is 00 a5. Measured on a physical BLE-35BWRY on 2026-09-06
+# over a direct adapter - 0xA500 accepted 98 consecutive chunk writes and
+# 0xA501 redrew the panel, three full transfers in a row. See
+# docs/hardware-verified-findings.md section 3.
+#
+# Written as the wire bytes rather than as ints so the low byte cannot be
+# swapped back by accident at a call site.
+CMD_IMAGE_STORE: Final = b"\x00\xa5"  # 3.1  + data pointer 4B + data
+CMD_IMAGE_REFRESH_RAW: Final = b"\x01\xa5"  # 3.2  + picture data size
+CMD_IMAGE_REFRESH_COMP: Final = b"\x02\xa5"  # 3.3  + picture data size
+CMD_MULTI_STORE: Final = b"\x03\xa5"  # 3.9  + data pointer 4B + data
+CMD_CLEAR: Final = b"\x04\xa5"  # 3.7  no payload
+CMD_OTA_SEND: Final = b"\x05\xa5"  # 3.5  + data pointer 4B + data
+CMD_OTA_UPDATE: Final = b"\x06\xa5"  # 3.6  + size 4B + crc16 2B
+CMD_OTA_ERASE: Final = b"\x07\xa5"  # 3.4  no payload, wait 1s
+CMD_RGB: Final = b"\x08\xa5"  # 3.8  + r + g + b + on2 + off2 + work4
+CMD_MULTI_REFRESH: Final = b"\x09\xa5"  # 3.10 + index A 1B + index B 1B
 
 # Multi-screen indices (sec. 3.10), sent as signed bytes.
 MULTI_INDEX_CLEAR: Final = -2
@@ -179,4 +198,3 @@ SERVICE_DEBUG_PROBE: Final = "debug_probe"
 SERVICE_DEBUG_COMMAND: Final = "debug_command"
 SERVICE_SEND_TEST_PATTERN: Final = "send_test_pattern"
 SERVICE_COMMAND_SWEEP: Final = "debug_command_sweep"
-SERVICE_UNLOCK_SWEEP: Final = "debug_unlock_sweep"

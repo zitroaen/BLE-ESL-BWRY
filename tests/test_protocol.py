@@ -80,7 +80,7 @@ def test_set_rgb_layout():
     uuid, payload, _ = client.writes[0]
     assert uuid == const.UUID_COMMAND
     assert len(payload) == 13
-    assert payload[:2] == b"\xa5\x08"
+    assert payload[:2] == b"\x08\xa5"
     assert payload[2:5] == b"\x11\x22\x33"
     assert struct.unpack("<HHI", payload[5:]) == (500, 250, 30000)
 
@@ -92,7 +92,7 @@ def test_clear_screen_has_no_payload():
     """0xA504 carries no data; a trailing byte is not part of the command."""
     client = FakeClient()
     run(protocol.clear_screen(client))
-    assert client.writes[0][1] == b"\xa5\x04"
+    assert client.writes[0][1] == b"\x04\xa5"
 
 
 # --- sections 3.1 - 3.2: image upload ------------------------------------
@@ -104,8 +104,8 @@ def test_send_image_chunks_and_pointers():
     client = FakeClient(mtu=100)
     run(protocol.send_image(client, data))
 
-    stores = [w for w in client.writes if w[1][:2] == b"\xa5\x00"]
-    refresh = [w for w in client.writes if w[1][:2] == b"\xa5\x01"]
+    stores = [w for w in client.writes if w[1][:2] == b"\x00\xa5"]
+    refresh = [w for w in client.writes if w[1][:2] == b"\x01\xa5"]
 
     assert len(refresh) == 1
     assert struct.unpack("<I", refresh[0][1][2:]) == (len(data),)
@@ -124,11 +124,37 @@ def test_send_image_chunks_and_pointers():
     assert bytes(rebuilt) == data
 
 
+def test_chunk_size_without_an_mtu_uses_the_measured_slice():
+    """A missing MTU must not fall back to the ATT minimum.
+
+    It used to assume 23, leaving 14 usable bytes: a full 17664 byte image
+    became ~1262 writes, which over a proxy takes minutes and fails long
+    before it finishes. 180 bytes is what carried three full images on real
+    hardware.
+    """
+    client = FakeClient(mtu=0)
+    run(protocol.send_image(client, bytes(1000)))
+
+    stores = [w for w in client.writes if w[1][:2] == b"\x00\xa5"]
+    # command 2 + pointer 4 + data.
+    assert len(stores[0][1]) - 6 == protocol.VERIFIED_CHUNK_BYTES
+
+
+def test_a_small_negotiated_mtu_still_wins():
+    """The cap is a ceiling, not an override: a real MTU is still respected."""
+    client = FakeClient(mtu=23)
+    run(protocol.send_image(client, bytes(100)))
+
+    stores = [w for w in client.writes if w[1][:2] == b"\x00\xa5"]
+    assert len(stores[0][1]) - 6 == 23 - 3 - 6
+    assert all(len(payload) <= 23 - 3 for _, payload, _ in stores)
+
+
 def test_send_image_compressed_uses_a502():
     """Block compressed payloads refresh via 0xA502."""
     client = FakeClient(mtu=100)
     run(protocol.send_image(client, b"\x00" * 32, compressed=True))
-    assert any(w[1][:2] == b"\xa5\x02" for w in client.writes)
+    assert any(w[1][:2] == b"\x02\xa5" for w in client.writes)
 
 
 # --- section 3.9 / 3.10: multi screen ------------------------------------
@@ -140,12 +166,12 @@ def test_multi_store_header_and_terminator():
     run(protocol.store_multi_image(client, 3, b"\xaa" * 20))
 
     first = client.writes[0][1]
-    assert first[:2] == b"\xa5\x03"
+    assert first[:2] == b"\x03\xa5"
     assert struct.unpack_from("<I", first, 2)[0] == 0
     assert first[6:12] == b"PIC03\x00"
 
     last = client.writes[-1][1]
-    assert last[:2] == b"\xa5\x03"
+    assert last[:2] == b"\x03\xa5"
     assert struct.unpack("<I", last[2:]) == (26,)  # 6 byte header + 20 byte data
 
 
@@ -158,7 +184,7 @@ def test_multi_refresh_signed_indices():
         )
     )
     payload = client.writes[0][1]
-    assert payload == b"\xa5\x09\xfe\xff"
+    assert payload == b"\x09\xa5\xfe\xff"
 
 
 # --- sections IV, V, VI: read characteristics ----------------------------

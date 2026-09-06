@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
-from collections.abc import Callable
 from dataclasses import dataclass
 
 from bleak import BleakClient
@@ -46,9 +45,19 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Conservative default when the client does not expose an MTU.
-_FALLBACK_MTU = 23
 _ATT_HEADER = 3
+
+# Data bytes per write. Measured on a physical BLE-35BWRY: 180 byte slices
+# (186 byte frames) with response=True carried three full 17664 byte images
+# without a single failed write. See docs/hardware-verified-findings.md
+# section 7.4.
+#
+# This is both the cap and the assumption when the client reports no MTU.
+# The previous fallback of 23 - the ATT minimum - left 14 usable bytes and
+# turned one image into ~1262 writes, which over a proxy takes minutes and
+# fails long before it finishes. A client that genuinely negotiated a small
+# MTU still reports it, and the min() below respects that.
+VERIFIED_CHUNK_BYTES = 180
 
 # Timing for bulk uploads. These are the values the easyTag driver from the
 # same vendor needed to avoid overrunning the label's buffer
@@ -88,25 +97,14 @@ def _aes_ecb_encrypt(data: bytes) -> bytes:
     return encryptor.update(data) + encryptor.finalize()
 
 
-def _aes_ecb_decrypt(data: bytes) -> bytes:
-    """Decrypt one block with AES-128-ECB using the vendor key."""
-    decryptor = Cipher(algorithms.AES(AES_KEY), modes.ECB()).decryptor()
-    return decryptor.update(data) + decryptor.finalize()
-
-
-# The document says the challenge is unlocked "using the ECB mode AES128
-# encryption", but that wording is a translation and the firmware may well
-# expect the inverse operation, or a different byte order. Our own arithmetic
-# has been verified; what has never been verified is that the label ACCEPTS
-# it, and a label that stays locked ignores writes silently.
-UNLOCK_VARIANTS: dict[str, Callable[[bytes], bytes]] = {
-    "encrypt": _aes_ecb_encrypt,
-    "decrypt": _aes_ecb_decrypt,
-    "encrypt_reversed": lambda c: _aes_ecb_encrypt(c[::-1]),
-    "decrypt_reversed": lambda c: _aes_ecb_decrypt(c[::-1]),
-    "encrypt_then_reverse": lambda c: _aes_ecb_encrypt(c)[::-1],
-    "echo": lambda c: bytes(c),
-}
+# The unlock is settled. The document's wording ("using the ECB mode AES128
+# encryption") is a translation, so five alternatives used to be kept around
+# in case the firmware meant the inverse operation or another byte order.
+# Two independent hardware runs killed them off: a sweep over an ESPHome
+# proxy in which only "encrypt" left the status byte unlocked and survived a
+# command write, and a direct-adapter run that read ERR=0 after the unlock
+# and then pushed 98 consecutive command writes without a drop.
+# See docs/hardware-verified-findings.md section 2.
 DEFAULT_UNLOCK_VARIANT = "encrypt"
 
 
@@ -115,7 +113,7 @@ async def read_challenge(client: BleakClient) -> bytes:
     return bytes(await client.read_gatt_char(UUID_SECURITY))
 
 
-async def unlock(client: BleakClient, variant: str = DEFAULT_UNLOCK_VARIANT) -> None:
+async def unlock(client: BleakClient) -> None:
     """Perform the challenge/response unlock described in section 2.
 
     The label exposes a 16 byte random number on the security characteristic
@@ -129,13 +127,10 @@ async def unlock(client: BleakClient, variant: str = DEFAULT_UNLOCK_VARIANT) -> 
             f"unexpected challenge length {len(challenge)}, expected {CHALLENGE_LEN}"
         )
 
-    token = UNLOCK_VARIANTS[variant](challenge)
+    token = _aes_ecb_encrypt(challenge)
     await client.write_gatt_char(UUID_SECURITY, token)
     _LOGGER.debug(
-        "Unlock (%s) written: challenge %s -> %s",
-        variant,
-        challenge.hex(" "),
-        token.hex(" "),
+        "Unlock written: challenge %s -> %s", challenge.hex(" "), token.hex(" ")
     )
 
 
@@ -213,9 +208,18 @@ async def set_rgb(
 
 
 def _chunk_size(client: BleakClient, header_len: int) -> int:
-    """Largest data slice that still fits into a single write."""
-    mtu = getattr(client, "mtu_size", None) or _FALLBACK_MTU
-    return max(1, mtu - _ATT_HEADER - header_len)
+    """Largest data slice that still fits into a single write.
+
+    Capped at the slice size that is known to work rather than at whatever
+    the negotiated MTU would allow: a larger frame has never been tried on
+    this hardware, and a bulk upload is the worst place to find out.
+    """
+    mtu = getattr(client, "mtu_size", None) or 0
+    room = mtu - _ATT_HEADER - header_len
+    if room <= 0:
+        # No usable MTU reported; go with the slice size that was measured.
+        return VERIFIED_CHUNK_BYTES
+    return max(1, min(room, VERIFIED_CHUNK_BYTES))
 
 
 async def _store_blocks(
@@ -323,7 +327,7 @@ def parse_advertisement(payload: bytes) -> tuple[VersionInfo, int] | None:
 
 
 def clear_screen_candidates() -> list[bytes]:
-    """Every documented way to clear the panel, plus byte order variants.
+    """Every documented way to clear the panel, in order of evidence.
 
     The document offers two paths, and they are not equivalent:
 
@@ -335,20 +339,25 @@ def clear_screen_candidates() -> list[bytes]:
     path the firmware actually implements. Signed -2 and -1 are 0xFE and
     0xFF on the wire.
 
-    Order matters. A candidate the label rejects revokes authorisation and
-    costs a reconnect, so the forms the document actually writes come first
-    and the speculative byte swaps come last. On hardware 0x04A5 is exactly
-    such a rejection, which is why it now sits at the end.
+    Commands go out little endian - measured for 0xA500 and 0xA501, see
+    docs/hardware-verified-findings.md section 3 - so the little endian
+    forms lead. Clear screen itself has never been measured in either
+    order, which is the whole reason this sweep still exists.
+
+    An earlier revision marked 04 a5 "known rejected". That verdict came
+    from a sweep that wrote a5 04 first on the same connection; a rejected
+    command revokes authorisation, so 04 a5 was judged on a link that was
+    already dead. It was never tested cleanly.
     """
     return [
-        bytes((0xA5, 0x04)),  # 3.7 as written
-        bytes((0xA5, 0x09, 0xFE, 0xFE)),  # 3.10, clear both planes
-        bytes((0xA5, 0x09, 0xFE, 0xFF)),  # 3.10, clear A, leave B
-        bytes((0xA5, 0x09, 0xFF, 0xFE)),  # 3.10, leave A, clear B
-        bytes((0xA5, 0x04, 0x00)),  # 3.7 with a zero length byte
-        bytes((0xA5, 0x04, 0x00, 0x00)),  # 3.7 with a zero length word
-        bytes((0x04, 0xA5)),  # 3.7, little endian opcode - known rejected
-        bytes((0x09, 0xA5, 0xFE, 0xFE)),  # 3.10, little endian opcode
+        bytes((0x04, 0xA5)),  # 3.7, little endian like the verified commands
+        bytes((0x09, 0xA5, 0xFE, 0xFE)),  # 3.10, clear both planes
+        bytes((0x09, 0xA5, 0xFE, 0xFF)),  # 3.10, clear A, leave B
+        bytes((0x09, 0xA5, 0xFF, 0xFE)),  # 3.10, leave A, clear B
+        bytes((0x04, 0xA5, 0x00)),  # 3.7 with a zero length byte
+        bytes((0x04, 0xA5, 0x00, 0x00)),  # 3.7 with a zero length word
+        bytes((0xA5, 0x04)),  # 3.7 as the document writes it, big endian
+        bytes((0xA5, 0x09, 0xFE, 0xFE)),  # 3.10 big endian
     ]
 
 
@@ -356,17 +365,18 @@ def command_variants(opcode: int = 0xA504) -> list[bytes]:
     """Plausible wire encodings of a two byte command.
 
     The document writes commands as "0xA504" without saying how the two
-    bytes reach the wire, and this device is already known to mix byte
-    orders between its advertisement and its characteristics. These are the
-    forms worth trying; the status characteristic says which one lands.
+    bytes reach the wire, and this device mixes byte orders between its
+    advertisement and its characteristics. Little endian is the measured
+    answer for 0xA500 and 0xA501, so it leads here; the rest stay because
+    an untested opcode may still behave differently.
     """
     high, low = (opcode >> 8) & 0xFF, opcode & 0xFF
     return [
-        bytes((high, low)),  # as written, big endian
-        bytes((low, high)),  # little endian
-        bytes((high, low, 0x00)),  # with a zero length byte
-        bytes((high, low, 0x00, 0x00)),  # with a zero length word
-        bytes((low, high, 0x00)),
+        bytes((low, high)),  # little endian, verified for 0xA500 / 0xA501
+        bytes((low, high, 0x00)),  # with a zero length byte
+        bytes((high, low)),  # as the document writes it, big endian
+        bytes((high, low, 0x00)),
+        bytes((high, low, 0x00, 0x00)),
     ]
 
 

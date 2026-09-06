@@ -29,7 +29,6 @@ from .const import (
     SERVICE_SEND_TEST_PATTERN,
     SERVICE_SET_IMAGE,
     SERVICE_SET_RGB,
-    SERVICE_UNLOCK_SWEEP,
 )
 from .device import ESLDevice
 from .imaging import BIT_ORDERS, ENCODINGS, ImageRequest
@@ -67,15 +66,6 @@ SET_RGB_SCHEMA = _DEVICE_SELECTOR.extend(
 
 CLEAR_SCREEN_SCHEMA = _DEVICE_SELECTOR
 DEBUG_PROBE_SCHEMA = _DEVICE_SELECTOR
-
-UNLOCK_SWEEP_SCHEMA = _DEVICE_SELECTOR.extend(
-    {
-        vol.Optional("probe_command", default="A504"): cv.string,
-        vol.Optional("settle", default=1.5): vol.All(
-            vol.Coerce(float), vol.Range(0.1, 10.0)
-        ),
-    }
-)
 
 COMMAND_SWEEP_SCHEMA = _DEVICE_SELECTOR.extend(
     {
@@ -263,28 +253,6 @@ def async_setup_services(hass: HomeAssistant) -> None:
             **source,
         )
 
-    async def _unlock_sweep(call: ServiceCall) -> None:
-        """Find out which unlock computation the label actually accepts."""
-        try:
-            probe = bytes.fromhex(
-                call.data["probe_command"].replace("0x", "").replace(" ", "")
-            )
-        except ValueError as err:
-            raise ServiceValidationError(f"probe_command must be hex: {err}") from err
-
-        for device in _resolve_devices(hass, call):
-            _run_detached(
-                hass,
-                device,
-                label="unlock sweep",
-                notification_id=f"{DOMAIN}_unlock_{device.address}",
-                factory=partial(
-                    device.async_unlock_sweep,
-                    probe_command=probe or None,
-                    settle=call.data["settle"],
-                ),
-            )
-
     async def _command_sweep(call: ServiceCall) -> None:
         """Try several command encodings in one wake-up and report the deltas."""
         if raw_payloads := call.data.get("payloads"):
@@ -354,9 +322,6 @@ def async_setup_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN, SERVICE_DEBUG_COMMAND, _debug_command, schema=DEBUG_COMMAND_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_UNLOCK_SWEEP, _unlock_sweep, schema=UNLOCK_SWEEP_SCHEMA
     )
     hass.services.async_register(
         DOMAIN, SERVICE_COMMAND_SWEEP, _command_sweep, schema=COMMAND_SWEEP_SCHEMA

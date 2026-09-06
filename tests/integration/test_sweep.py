@@ -160,16 +160,6 @@ async def test_sweep_result_is_kept_for_diagnostics(
     assert device.state.last_command["results"][0]["payload"] == "a5 04"
 
 
-async def test_variants_cover_both_byte_orders() -> None:
-    """The default candidate set must contain the obvious alternatives."""
-    from custom_components.esl_zhsunyco.protocol import command_variants
-
-    variants = command_variants(0xA504)
-    assert b"\xa5\x04" in variants
-    assert b"\x04\xa5" in variants
-    assert len(set(variants)) == len(variants), "no duplicate candidates"
-
-
 async def test_att_authorisation_error_is_recognised_as_rejection(
     hass: HomeAssistant, config_entry, mock_bluetooth
 ) -> None:
@@ -360,17 +350,29 @@ async def test_tolerated_candidate_keeps_the_connection(
     assert fresh == [True, False, False, True]
 
 
-async def test_documented_candidates_come_before_the_speculative_ones(
-) -> None:
-    """Ordering is what keeps the sweep short.
+async def test_little_endian_candidates_come_first() -> None:
+    """Ordering follows the evidence, and every rejection costs a reconnect.
 
-    04 a5 is known on hardware to revoke authorisation, and every rejection
-    costs a reconnect, so the forms the document actually writes go first.
+    Little endian is what the hardware accepted for 0xA500 and 0xA501, so
+    04 a5 leads. It used to be last, marked "known rejected" - a verdict
+    from a sweep that had already written a5 04 on the same connection and
+    so judged it on a link the label had cut.
     """
     from custom_components.esl_zhsunyco.protocol import clear_screen_candidates
 
     candidates = clear_screen_candidates()
-    assert candidates[0] == b"\xa5\x04"
-    assert candidates[1] == b"\xa5\x09\xfe\xfe"
-    assert candidates[-2] == b"\x04\xa5"
+    assert candidates[0] == b"\x04\xa5"
+    assert candidates[1] == b"\x09\xa5\xfe\xfe"
+    assert b"\xa5\x04" in candidates, "big endian stays in, it is untested"
+    assert candidates.index(b"\x04\xa5") < candidates.index(b"\xa5\x04")
     assert len(set(candidates)) == len(candidates)
+
+
+async def test_command_variants_lead_with_little_endian() -> None:
+    """Same reasoning for an arbitrary opcode."""
+    from custom_components.esl_zhsunyco.protocol import command_variants
+
+    variants = command_variants(0xA504)
+    assert variants[0] == b"\x04\xa5"
+    assert b"\xa5\x04" in variants
+    assert len(set(variants)) == len(variants), "no duplicate candidates"

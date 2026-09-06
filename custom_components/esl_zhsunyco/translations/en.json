@@ -37,13 +37,11 @@
         "data": {
           "scan_interval_min": "Poll interval (0 disables polling)",
           "write_mode": "Command write mode",
-          "linger_s": "Keep connection open (seconds)",
-          "unlock_variant": "Unlock computation"
+          "linger_s": "Keep connection open (seconds)"
         },
         "data_description": {
           "write_mode": "How commands are written over Bluetooth. Try 'without response' if the LED and clear screen do nothing while sensors still update.",
-          "linger_s": "How long to hold the Bluetooth connection after a command. Reconnecting means waiting for the label to advertise again, which takes minutes, so a short linger makes follow-up commands instant. 0 disconnects immediately.",
-          "unlock_variant": "How the AES challenge response is computed. Change this only if the unlock sweep found a different variant works."
+          "linger_s": "How long to hold the Bluetooth connection after a command. Reconnecting means waiting for the label to advertise again, which takes minutes, so a short linger makes follow-up commands instant. 0 disconnects immediately."
         }
       }
     }
@@ -236,20 +234,6 @@
         "preset": {
           "name": "Candidate set",
           "description": "clear_screen tries both documented ways to clear the panel (0xA504 and 0xA509 with index -2). opcode derives byte order variants from the opcode field instead."
-        }
-      }
-    },
-    "debug_unlock_sweep": {
-      "name": "Debug unlock sweep",
-      "description": "Tries every AES unlock computation in one connection and reports which one makes the label act on a command. The vendor document is ambiguous about the direction, and a label that stays locked ignores writes silently.",
-      "fields": {
-        "probe_command": {
-          "name": "Probe command",
-          "description": "Command sent after each unlock attempt, as hex. Clear screen (A504) is the easiest to detect."
-        },
-        "settle": {
-          "name": "Settle time",
-          "description": "Seconds to wait after each unlock write before sending the command."
         }
       }
     }

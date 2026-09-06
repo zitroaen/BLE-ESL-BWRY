@@ -15,18 +15,15 @@ from .const import (
     CONF_LINGER_S,
     CONF_MODEL,
     CONF_SCAN_INTERVAL_MIN,
-    CONF_UNLOCK_VARIANT,
     CONF_WRITE_MODE,
     DEFAULT_LINGER_S,
     DEFAULT_MODEL,
     DEFAULT_SCAN_INTERVAL_MIN,
-    DEFAULT_UNLOCK_VARIANT,
     DEFAULT_WRITE_MODE,
     DOMAIN,
     MODELS,
     WRITE_MODES,
 )
-from .protocol import UNLOCK_VARIANTS
 
 MODEL_SELECTOR = selector.SelectSelector(
     selector.SelectSelectorConfig(
@@ -34,13 +31,6 @@ MODEL_SELECTOR = selector.SelectSelector(
             selector.SelectOptionDict(value=key, label=f"{key} - {info['desc']}")
             for key, info in MODELS.items()
         ],
-        mode=selector.SelectSelectorMode.DROPDOWN,
-    )
-)
-
-UNLOCK_SELECTOR = selector.SelectSelector(
-    selector.SelectSelectorConfig(
-        options=list(UNLOCK_VARIANTS),
         mode=selector.SelectSelectorMode.DROPDOWN,
     )
 )
@@ -187,7 +177,6 @@ class ESLOptionsFlow(OptionsFlow):
                     CONF_SCAN_INTERVAL_MIN: int(user_input[CONF_SCAN_INTERVAL_MIN]),
                     CONF_LINGER_S: int(user_input[CONF_LINGER_S]),
                     CONF_WRITE_MODE: user_input[CONF_WRITE_MODE],
-                    CONF_UNLOCK_VARIANT: user_input[CONF_UNLOCK_VARIANT],
                 }
             )
 
@@ -210,12 +199,6 @@ class ESLOptionsFlow(OptionsFlow):
                         CONF_WRITE_MODE,
                         default=options.get(CONF_WRITE_MODE, DEFAULT_WRITE_MODE),
                     ): WRITE_MODE_SELECTOR,
-                    vol.Required(
-                        CONF_UNLOCK_VARIANT,
-                        default=options.get(
-                            CONF_UNLOCK_VARIANT, DEFAULT_UNLOCK_VARIANT
-                        ),
-                    ): UNLOCK_SELECTOR,
                 }
             ),
         )
