@@ -54,7 +54,7 @@ def _patches(client):
     async def fake_establish(*args, **kwargs):
         return client
 
-    async def fake_unlock(_client):
+    async def fake_unlock(_client, variant=None):
         return None
 
     async def fake_clear(_client, response=None):

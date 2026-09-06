@@ -82,7 +82,7 @@ async def test_timeout_during_unlock_closes_the_connection(
     async def fake_establish(*args, **kwargs):
         return client
 
-    async def hangs(_client):
+    async def hangs(_client, variant=None):
         await asyncio.sleep(3600)
 
     with (

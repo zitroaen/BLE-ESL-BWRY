@@ -43,7 +43,7 @@ def _patched_connect(client, waits: list):
     async def fake_establish(*args, **kwargs):
         return client
 
-    async def fake_unlock(_client):
+    async def fake_unlock(_client, variant=None):
         return None
 
     return (

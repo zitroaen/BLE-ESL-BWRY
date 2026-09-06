@@ -45,7 +45,7 @@ def _patches(clients: list[FakeClient]):
         made.append(client)
         return client
 
-    async def fake_unlock(_client):
+    async def fake_unlock(_client, variant=None):
         return None
 
     return (

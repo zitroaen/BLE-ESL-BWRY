@@ -41,6 +41,13 @@ async def _never_advertises(*args, **kwargs):
     raise TimeoutError
 
 
+@pytest.fixture(autouse=True)
+def no_connect_settle():
+    """Skip the post-connect settle delay; production uses one second."""
+    with patch("custom_components.esl_zhsunyco.device.POST_CONNECT_SETTLE_S", 0):
+        yield
+
+
 @pytest.fixture
 def mock_bluetooth():
     """Stub out the Bluetooth stack so no adapter is required."""

@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from bleak import BleakClient
@@ -87,7 +88,34 @@ def _aes_ecb_encrypt(data: bytes) -> bytes:
     return encryptor.update(data) + encryptor.finalize()
 
 
-async def unlock(client: BleakClient) -> None:
+def _aes_ecb_decrypt(data: bytes) -> bytes:
+    """Decrypt one block with AES-128-ECB using the vendor key."""
+    decryptor = Cipher(algorithms.AES(AES_KEY), modes.ECB()).decryptor()
+    return decryptor.update(data) + decryptor.finalize()
+
+
+# The document says the challenge is unlocked "using the ECB mode AES128
+# encryption", but that wording is a translation and the firmware may well
+# expect the inverse operation, or a different byte order. Our own arithmetic
+# has been verified; what has never been verified is that the label ACCEPTS
+# it, and a label that stays locked ignores writes silently.
+UNLOCK_VARIANTS: dict[str, Callable[[bytes], bytes]] = {
+    "encrypt": _aes_ecb_encrypt,
+    "decrypt": _aes_ecb_decrypt,
+    "encrypt_reversed": lambda c: _aes_ecb_encrypt(c[::-1]),
+    "decrypt_reversed": lambda c: _aes_ecb_decrypt(c[::-1]),
+    "encrypt_then_reverse": lambda c: _aes_ecb_encrypt(c)[::-1],
+    "echo": lambda c: bytes(c),
+}
+DEFAULT_UNLOCK_VARIANT = "encrypt"
+
+
+async def read_challenge(client: BleakClient) -> bytes:
+    """Read the 16 byte random number the unlock is computed from."""
+    return bytes(await client.read_gatt_char(UUID_SECURITY))
+
+
+async def unlock(client: BleakClient, variant: str = DEFAULT_UNLOCK_VARIANT) -> None:
     """Perform the challenge/response unlock described in section 2.
 
     The label exposes a 16 byte random number on the security characteristic
@@ -95,15 +123,20 @@ async def unlock(client: BleakClient) -> None:
     AES-128-ECB and written back. Until that happens the label drops the
     connection as soon as any other characteristic is written.
     """
-    challenge = bytes(await client.read_gatt_char(UUID_SECURITY))
+    challenge = await read_challenge(client)
     if len(challenge) != CHALLENGE_LEN:
         raise ESLProtocolError(
             f"unexpected challenge length {len(challenge)}, expected {CHALLENGE_LEN}"
         )
 
-    token = _aes_ecb_encrypt(challenge)
+    token = UNLOCK_VARIANTS[variant](challenge)
     await client.write_gatt_char(UUID_SECURITY, token)
-    _LOGGER.debug("Unlock response written (challenge %s)", challenge.hex())
+    _LOGGER.debug(
+        "Unlock (%s) written: challenge %s -> %s",
+        variant,
+        challenge.hex(" "),
+        token.hex(" "),
+    )
 
 
 async def send_command(

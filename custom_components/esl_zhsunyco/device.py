@@ -23,10 +23,12 @@ from homeassistant.util import dt as dt_util
 
 from . import protocol
 from .const import (
+    CMD_CLEAR,
     CONF_ADDRESS,
     CONF_LINGER_S,
     CONF_MODEL,
     CONF_SCAN_INTERVAL_MIN,
+    CONF_UNLOCK_VARIANT,
     CONF_WRITE_MODE,
     DEFAULT_LINGER_S,
     DEFAULT_MODEL,
@@ -35,6 +37,7 @@ from .const import (
     DEFAULT_RGB_ON_MS,
     DEFAULT_RGB_WORK_MS,
     DEFAULT_SCAN_INTERVAL_MIN,
+    DEFAULT_UNLOCK_VARIANT,
     DEFAULT_WRITE_MODE,
     DOMAIN,
     ERROR_CODES,
@@ -74,6 +77,12 @@ SEED_INTERVAL = timedelta(minutes=5)
 # An e-ink refresh takes seconds, and the status characteristic is the only
 # feedback the label gives. Watching it across a command turns "the write was
 # accepted" into "the label actually did something".
+# The reference implementation for the sibling firmware settles for a second
+# after connecting and subscribes to notifications before writing anything.
+# Our document mentions neither, but the label's read characteristics all
+# advertise notify, and some firmwares only start acting once subscribed.
+POST_CONNECT_SETTLE_S = 1.0
+
 STATUS_WATCH_S = 8.0
 STATUS_POLL_S = 0.5
 # Belt and braces so a misconfigured interval cannot spin.
@@ -109,6 +118,8 @@ class ESLState:
 
     # What the last command did, so a button press is not a silent event.
     last_command: dict[str, Any] | None = None
+    # Anything the label pushed at us; the document does not mention these.
+    notifications: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def error_text(self) -> str | None:
@@ -512,9 +523,11 @@ class ESLDevice:
         self.state.last_error_message = None
         return self.state
 
-    def connection(self, wait: int = ADVERTISEMENT_WAIT_S) -> _ESLConnection:
+    def connection(
+        self, wait: int = ADVERTISEMENT_WAIT_S, *, unlock: bool = True
+    ) -> _ESLConnection:
         """Return an async context manager holding an unlocked connection."""
-        return _ESLConnection(self, wait)
+        return _ESLConnection(self, wait, unlock=unlock)
 
     # ------------------------------------------------------------------
     # Commands
@@ -676,6 +689,33 @@ class ESLDevice:
         )
         _LOGGER.debug("%s image uploaded (%d bytes)", self.address, len(data))
 
+    @property
+    def unlock_variant(self) -> str:
+        """Which unlock computation to use; the document leaves it ambiguous."""
+        return str(self.entry.options.get(CONF_UNLOCK_VARIANT, DEFAULT_UNLOCK_VARIANT))
+
+    async def _async_subscribe(self, client) -> None:
+        """Subscribe to the status characteristic, if the label offers notify.
+
+        The document never mentions notifications, but every read
+        characteristic advertises them and the reference implementation for
+        the sibling firmware subscribes before writing anything.
+        """
+        self.state.notifications = []
+
+        def _received(_sender, data: bytearray) -> None:
+            entry = {
+                "at": dt_util.utcnow().isoformat(),
+                "raw": bytes(data)[:16].hex(" "),
+            }
+            self.state.notifications.append(entry)
+            _LOGGER.warning("ESL %s notification: %s", self.address, entry["raw"])
+
+        try:
+            await client.start_notify(UUID_STATUS, _received)
+        except Exception as err:  # noqa: BLE001 - optional, never fatal
+            _LOGGER.debug("%s: status notify unavailable: %s", self.address, err)
+
     async def async_send_raw_command(
         self, payload: bytes, *, expect_response: bool = True
     ) -> None:
@@ -685,6 +725,83 @@ class ESLDevice:
         in the integration uses this path.
         """
         await self.async_command_sweep([payload], response=expect_response)
+
+    async def async_unlock_sweep(
+        self, *, probe_command: bytes | None = None, settle: float = 1.5
+    ) -> dict[str, Any]:
+        """Try each unlock computation and see which one makes the label act.
+
+        This answers the question the arithmetic cannot: our AES result has
+        been verified against the algorithm, but never against the label. A
+        label that stays locked accepts writes and ignores them, which is
+        exactly what has been observed.
+
+        The challenge is fixed for the life of a connection, so every variant
+        can be tried in one connection: write the candidate response, send a
+        command, and watch the status characteristic.
+        """
+        from .protocol import UNLOCK_VARIANTS, read_challenge
+
+        if probe_command is None:
+            probe_command = CMD_CLEAR
+
+        results: list[dict[str, Any]] = []
+        report: dict[str, Any] = {
+            "address": self.address,
+            "probe_command": probe_command.hex(" "),
+            "results": results,
+        }
+
+        try:
+            # unlock=False: the sweep performs the unlock itself.
+            async with self.connection(unlock=False) as client:
+                challenge = await read_challenge(client)
+                report["challenge"] = challenge.hex(" ")
+
+                for name, compute in UNLOCK_VARIANTS.items():
+                    entry: dict[str, Any] = {"variant": name}
+                    try:
+                        token = compute(challenge)
+                        entry["response"] = token.hex(" ")
+                        await client.write_gatt_char(UUID_SECURITY, token)
+                        await asyncio.sleep(settle)
+                        entry["status_after_unlock"] = await _read_status(client)
+
+                        await protocol.send_command(
+                            client, probe_command, response=self.write_response
+                        )
+                        entry["command"] = "written"
+                        entry["status_after_command"] = await _watch_status(client)
+                        entry["label_reacted"] = bool(
+                            entry["status_after_command"].get("became_busy")
+                        )
+                    except Exception as err:  # noqa: BLE001 - report and continue
+                        entry["error"] = f"{type(err).__name__}: {err}"
+                        entry["label_reacted"] = False
+
+                    entry["still_connected"] = bool(
+                        getattr(client, "is_connected", True)
+                    )
+                    results.append(entry)
+                    if not entry["still_connected"]:
+                        entry["note"] = "label dropped the link after this variant"
+                        break
+        except Exception as err:  # noqa: BLE001 - the report is the deliverable
+            report["error"] = f"{type(err).__name__}: {err}"
+
+        winner = next(
+            (item["variant"] for item in results if item.get("label_reacted")), None
+        )
+        report["working_variant"] = winner
+        report["notifications"] = list(self.state.notifications)
+        report["conclusion"] = (
+            f"the label reacted to the '{winner}' unlock"
+            if winner
+            else "no unlock variant made the label react"
+        )
+        self.state.last_command = report
+        _LOGGER.warning("ESL unlock sweep %s: %s", self.address, report)
+        return report
 
     async def async_command_sweep(
         self,
@@ -885,9 +1002,16 @@ class _ESLConnection:
     transfer.
     """
 
-    def __init__(self, device: ESLDevice, wait: int = ADVERTISEMENT_WAIT_S) -> None:
+    def __init__(
+        self,
+        device: ESLDevice,
+        wait: int = ADVERTISEMENT_WAIT_S,
+        *,
+        unlock: bool = True,
+    ) -> None:
         self._device = device
         self._wait = wait
+        self._unlock = unlock
 
     async def __aenter__(self) -> BleakClientWithServiceCache:
         device = self._device
@@ -944,7 +1068,12 @@ class _ESLConnection:
                     "service cache was cleared"
                 )
 
-            await protocol.unlock(client)
+            # Give the label a moment before the first GATT write.
+            await asyncio.sleep(POST_CONNECT_SETTLE_S)
+            await device._async_subscribe(client)
+
+            if self._unlock:
+                await protocol.unlock(client, device.unlock_variant)
             device._client = client
             return client
         except BaseException:

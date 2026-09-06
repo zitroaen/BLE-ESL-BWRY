@@ -323,6 +323,33 @@ Der Diagnose-Download baut seit 0.9.1 **keine Verbindung mehr auf**. Für
 einen Probe-Bericht den Button **Diagnose-Probe** verwenden; das Ergebnis
 landet dann auch in der Diagnose-Datei.
 
+### Das Label nimmt Kommandos an und tut nichts
+
+Beobachtet: Verbindung steht, Status ist lesbar, Fehlercode bleibt 0, aber
+`busy` steigt nie. Das Label **ignoriert die Writes stillschweigend** — genau
+das Verhalten eines Geräts, das noch **gesperrt** ist. Die Doku sagt dazu:
+
+> „If it is not unlocked, writing other services will be disconnected"
+
+Der AES-Handshake ist damit der Hauptverdächtige. Unsere Rechnung ist
+verifiziert — dass das **Label sie akzeptiert**, war es nie. Die Doku sagt
+„using the ECB mode AES128 encryption", das ist eine Übersetzung und könnte
+auch die Gegenrichtung meinen.
+
+```yaml
+action: esl_zhsunyco.debug_unlock_sweep
+target:
+  device_id: <dein Label>
+```
+
+Probiert in **einer** Verbindung alle Varianten durch — `encrypt`,
+`decrypt`, jeweils mit umgekehrter Challenge, sowie den ungewandelten Echo —
+und schickt nach jeder ein Kommando, während der Status beobachtet wird. Die
+Challenge ist pro Verbindung konstant, deshalb geht das ohne Neuverbinden.
+
+Das Ergebnis nennt `working_variant`. Diese lässt sich dann in den Optionen
+unter **Unlock-Berechnung** dauerhaft einstellen.
+
 ### Hat das Kommando wirklich etwas bewirkt?
 
 Ein Schreibvorgang auf die Command-Charakteristik meldet Erfolg, **egal ob

@@ -15,6 +15,12 @@ CONF_MODEL: Final = "model"
 CONF_SCAN_INTERVAL_MIN: Final = "scan_interval_min"
 CONF_WRITE_MODE: Final = "write_mode"
 CONF_LINGER_S: Final = "linger_s"
+CONF_UNLOCK_VARIANT: Final = "unlock_variant"
+
+# The document says the challenge is unlocked with AES-128-ECB "encryption",
+# but that is a translation and the label ignores writes silently when it
+# stays locked, so the alternatives have to be reachable.
+DEFAULT_UNLOCK_VARIANT: Final = "encrypt"
 
 # How long the connection is held open after a command. Reconnecting means
 # waiting for the label to advertise again, which dominates everything else,
@@ -173,3 +179,4 @@ SERVICE_DEBUG_PROBE: Final = "debug_probe"
 SERVICE_DEBUG_COMMAND: Final = "debug_command"
 SERVICE_SEND_TEST_PATTERN: Final = "send_test_pattern"
 SERVICE_COMMAND_SWEEP: Final = "debug_command_sweep"
+SERVICE_UNLOCK_SWEEP: Final = "debug_unlock_sweep"
