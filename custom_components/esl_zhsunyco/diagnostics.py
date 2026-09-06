@@ -71,6 +71,7 @@ async def async_get_config_entry_diagnostics(
                 else None
             ),
         },
+        "bluetooth": device.bluetooth_report(),
         "advertisement": {
             "raw_by_company_id": dict(state.advert_raw),
             "decoded": dict(state.advert_decoded),

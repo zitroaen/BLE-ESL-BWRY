@@ -299,8 +299,25 @@ verbundenes BLE-Gerät **sendet keine Advertisements mehr** — die Integration
 wurde dadurch blind und alle Entitäten fielen aus.
 
 Behoben in 0.9.1. Falls es noch auftritt: **Integration neu laden**
-(Einstellungen → Geräte & Dienste → ⋮ → Neu laden). Das schließt eine
-hängende Verbindung sauber, danach kommen die Advertisements zurück.
+(Einstellungen → Geräte & Dienste → ⋮ → Neu laden).
+
+Seit 0.10.0 gibt es zusätzlich:
+
+- Der Advertisement-Callback verlangt **keinen verbindungsfähigen Scanner**
+  mehr. Ohne diese Angabe verlangt Home Assistant standardmäßig einen — und
+  Advertisements, die nur ein passiver Scanner sieht, kamen nie an.
+- Alle 5 Minuten werden die Daten zusätzlich direkt aus dem
+  Bluetooth-Stack von Home Assistant gelesen. Ein ausbleibender Callback
+  lässt die Sensoren dadurch nicht mehr dauerhaft leer.
+- Die Diagnose-Datei enthält einen Abschnitt **`bluetooth`**. Er
+  unterscheidet die beiden grundverschiedenen Fälle:
+
+  | Feld | Bedeutung |
+  |---|---|
+  | `last_service_info_any: null` | Home Assistant sieht das Label **überhaupt nicht** — es ist still, außer Reichweite oder noch verbunden |
+  | `last_service_info_any` gefüllt, aber Entitäten leer | HA sieht es, unser Callback greift nicht |
+  | `scanners_seeing_this_label: []` | kein Adapter/Proxy empfängt es |
+  | `learned_advertising_interval_s` | wie oft HA das Label senden sieht |
 
 Der Diagnose-Download baut seit 0.9.1 **keine Verbindung mehr auf**. Für
 einen Probe-Bericht den Button **Diagnose-Probe** verwenden; das Ergebnis

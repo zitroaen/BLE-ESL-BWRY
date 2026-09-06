@@ -15,7 +15,7 @@ from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -61,6 +61,11 @@ CONNECT_TIMEOUT = 30.0
 # the next advertisement and connecting inside that window is what actually
 # works, so commands wait rather than fail.
 ADVERTISEMENT_WAIT_S = 180
+
+# The advertisement callback is the normal path. This re-reads the state
+# Home Assistant already holds, so one missed callback cannot leave every
+# entity blank until the next connectable poll, which may be hours away.
+SEED_INTERVAL = timedelta(minutes=5)
 
 
 @dataclass
@@ -122,6 +127,7 @@ class ESLDevice:
         # A live connection kept between commands, plus the timer ending it.
         self._client: BleakClientWithServiceCache | None = None
         self._cancel_linger: CALLBACK_TYPE | None = None
+        self._cancel_seed: CALLBACK_TYPE | None = None
 
         self.coordinator: DataUpdateCoordinator[ESLState] = DataUpdateCoordinator(
             hass,
@@ -194,6 +200,28 @@ class ESLDevice:
             return False
         return None
 
+    @callback
+    def _seed_from_stack(self) -> bool:
+        """Take whatever the Bluetooth stack already holds for this address.
+
+        The advertisement callback is the normal path, but relying on it alone
+        means one missed registration leaves every entity blank. This is a
+        cheap read of state Home Assistant already has.
+        """
+        service_info = bluetooth.async_last_service_info(
+            self.hass, self.address, connectable=False
+        )
+        if service_info is None:
+            return False
+        self._apply_service_info(service_info)
+        return True
+
+    @callback
+    def _periodic_seed(self, _now) -> None:
+        """Refresh from the Bluetooth stack on a timer."""
+        if self._seed_from_stack():
+            self.coordinator.async_update_listeners()
+
     def _poll_interval(self) -> timedelta | None:
         """Interval for the connectable poll, or None when disabled."""
         minutes = int(
@@ -209,15 +237,18 @@ class ESLDevice:
         self._unregister_advert = bluetooth.async_register_callback(
             self.hass,
             self._advert_received,
-            bluetooth.BluetoothCallbackMatcher(address=self.address),
+            # connectable=False on purpose: without it the matcher defaults to
+            # requiring a connectable scanner, and advertisements seen only by
+            # a passive one would never reach us. Battery and version need no
+            # connection, so there is nothing to gain from that restriction.
+            bluetooth.BluetoothCallbackMatcher(address=self.address, connectable=False),
             bluetooth.BluetoothScanningMode.PASSIVE,
         )
 
-        # Seed from whatever the Bluetooth integration has already seen.
-        if service_info := bluetooth.async_last_service_info(
-            self.hass, self.address, connectable=False
-        ):
-            self._apply_service_info(service_info)
+        self._seed_from_stack()
+        self._cancel_seed = async_track_time_interval(
+            self.hass, self._periodic_seed, SEED_INTERVAL
+        )
 
         # Not awaited: connecting can take minutes while the label is asleep,
         # and blocking setup on that held up Home Assistant startup for 96
@@ -234,6 +265,9 @@ class ESLDevice:
         if self._unregister_advert is not None:
             self._unregister_advert()
             self._unregister_advert = None
+        if self._cancel_seed is not None:
+            self._cancel_seed()
+            self._cancel_seed = None
         self._cancel_linger_timer()
         await self._async_disconnect()
 
@@ -295,6 +329,71 @@ class ESLDevice:
         self.state.disp_version = version.disp_version
         self.state.battery_mv = battery_mv
         return True
+
+    def bluetooth_report(self) -> dict[str, Any]:
+        """Report what Home Assistant's Bluetooth stack knows about this label.
+
+        Purely passive. This separates "Home Assistant never sees the label"
+        from "Home Assistant sees it but our callback is not firing", which
+        are the two very different reasons entities can go unavailable.
+        """
+        report: dict[str, Any] = {
+            "callback_registered": self._unregister_advert is not None,
+            "scanners_total": bluetooth.async_scanner_count(
+                self.hass, connectable=False
+            ),
+            "scanners_connectable": bluetooth.async_scanner_count(
+                self.hass, connectable=True
+            ),
+            "learned_advertising_interval_s": (
+                bluetooth.async_get_learned_advertising_interval(
+                    self.hass, self.address
+                )
+            ),
+        }
+
+        for label, connectable in (("any", False), ("connectable", True)):
+            info = bluetooth.async_last_service_info(
+                self.hass, self.address, connectable=connectable
+            )
+            report[f"last_service_info_{label}"] = (
+                {
+                    "name": info.name,
+                    "rssi": info.rssi,
+                    "source": info.source,
+                    "manufacturer_data": {
+                        f"0x{cid:04X}": bytes(payload).hex(" ")
+                        for cid, payload in info.manufacturer_data.items()
+                    },
+                }
+                if info is not None
+                else None
+            )
+            report[f"address_present_{label}"] = bluetooth.async_address_present(
+                self.hass, self.address, connectable=connectable
+            )
+            report[f"ble_device_{label}"] = (
+                bluetooth.async_ble_device_from_address(
+                    self.hass, self.address, connectable=connectable
+                )
+                is not None
+            )
+
+        try:
+            report["scanners_seeing_this_label"] = [
+                {
+                    "source": scanner_device.scanner.source,
+                    "name": scanner_device.scanner.name,
+                    "connectable": scanner_device.scanner.connectable,
+                }
+                for scanner_device in bluetooth.async_scanner_devices_by_address(
+                    self.hass, self.address, connectable=False
+                )
+            ]
+        except Exception as err:  # noqa: BLE001 - diagnostics must not fail
+            report["scanners_seeing_this_label"] = f"{type(err).__name__}: {err}"
+
+        return report
 
     # ------------------------------------------------------------------
     # Active path: connections
@@ -372,6 +471,10 @@ class ESLDevice:
 
     async def _async_poll(self) -> ESLState:
         """Connect, unlock and read version, battery and status."""
+        # Cheap and connection free; keeps the sensors alive even if the
+        # advertisement callback is not delivering for some reason.
+        self._seed_from_stack()
+
         try:
             async with self.connection() as client:
                 version = await protocol.read_version(client)
