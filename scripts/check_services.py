@@ -31,7 +31,7 @@ STRING_FILES = ("strings.json", "translations/en.json", "translations/de.json")
 
 
 def _check_target(name: str, target: dict) -> list[str]:
-    """A device filter on a target is rejected by hassfest outright."""
+    """Reject a device filter on a target, exactly as hassfest does."""
     if "device" in target:
         return [
             f"{name}.target has a device key; hassfest rejects device filters "
