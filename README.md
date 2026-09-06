@@ -460,8 +460,24 @@ data:
   opcode: "A504"     # Bildschirm löschen
 ```
 
-Getestet werden daraus abgeleitet `a5 04`, `04 a5`, `a5 04 00`,
-`a5 04 00 00` und `04 a5 00`. Das Ergebnis kommt als Benachrichtigung:
+Standardmäßig (`preset: clear_screen`) werden **beide dokumentierten
+Löschwege** getestet, nicht nur Byte-Varianten eines einzigen:
+
+| Payload | Herkunft |
+|---|---|
+| `a5 04` | Abschn. 3.7 „Unbind Clear Screen" |
+| `04 a5` | dasselbe, Opcode umgedreht |
+| `a5 09 fe fe` | Abschn. 3.10, beide Ebenen löschen (Index −2) |
+| `a5 09 fe ff` | Abschn. 3.10, nur Ebene A löschen |
+| `a5 09 ff fe` | Abschn. 3.10, nur Ebene B löschen |
+| `09 a5 fe fe` | dasselbe, Opcode umgedreht |
+| `a5 04 00`, `a5 04 00 00` | mit Längenbytes |
+
+„Unbind" in 3.7 klingt nach Kopplung/Reset — möglicherweise ist gar nicht
+das der normale Löschweg, sondern 3.10 mit Index −2. Mit `preset: opcode`
+lassen sich stattdessen Varianten aus einem beliebigen Opcode ableiten.
+
+Das Ergebnis kommt als Benachrichtigung:
 
 - `status_changed: true` bei einer Variante → **diese Kodierung ist richtig**
 - `any_status_changed: false` → keine Variante wurde verstanden

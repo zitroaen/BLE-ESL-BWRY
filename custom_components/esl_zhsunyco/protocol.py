@@ -322,6 +322,31 @@ def parse_advertisement(payload: bytes) -> tuple[VersionInfo, int] | None:
     )
 
 
+def clear_screen_candidates() -> list[bytes]:
+    """Every documented way to clear the panel, plus byte order variants.
+
+    The document offers two paths, and they are not equivalent:
+
+      3.7   0xA504                     "Unbind Clear Screen"
+      3.10  0xA509 + index A + index B, index -2 meaning clear screen
+
+    "Unbind" suggests 3.7 is tied to pairing rather than being the ordinary
+    clear, so 3.10 with -2 in both planes is at least as likely to be the
+    path the firmware actually implements. Signed -2 and -1 are 0xFE and
+    0xFF on the wire.
+    """
+    return [
+        bytes((0xA5, 0x04)),  # 3.7 as written
+        bytes((0x04, 0xA5)),  # 3.7, little endian opcode
+        bytes((0xA5, 0x09, 0xFE, 0xFE)),  # 3.10, clear both planes
+        bytes((0xA5, 0x09, 0xFE, 0xFF)),  # 3.10, clear A, leave B
+        bytes((0xA5, 0x09, 0xFF, 0xFE)),  # 3.10, leave A, clear B
+        bytes((0x09, 0xA5, 0xFE, 0xFE)),  # 3.10, little endian opcode
+        bytes((0xA5, 0x04, 0x00)),  # 3.7 with a zero length byte
+        bytes((0xA5, 0x04, 0x00, 0x00)),  # 3.7 with a zero length word
+    ]
+
+
 def command_variants(opcode: int = 0xA504) -> list[bytes]:
     """Plausible wire encodings of a two byte command.
 
@@ -475,6 +500,10 @@ async def probe_device(client: BleakClient) -> dict[str, object]:
         ("version", UUID_VERSION),
         ("battery", UUID_BATTERY),
         ("status", UUID_STATUS),
+        # Readable per the GATT table, and never looked at so far. If the
+        # firmware echoes the last frame or a template here, that settles the
+        # command encoding outright.
+        ("command", UUID_COMMAND),
     ):
         try:
             raw = bytes(await client.read_gatt_char(uuid))

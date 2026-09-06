@@ -165,6 +165,12 @@ debug_command_sweep:
     device:
       integration: esl_zhsunyco
   fields:
+    preset:
+      required: false
+      default: clear_screen
+      selector:
+        select:
+          options: [clear_screen, opcode]
     opcode:
       required: false
       default: "A504"

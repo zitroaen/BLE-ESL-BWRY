@@ -33,7 +33,7 @@ from .device import ESLDevice
 from .imaging import BIT_ORDERS, ENCODINGS, ImageRequest
 from .patterns import DEFAULT_PATTERN, PATTERNS
 from .probe import async_probe_and_notify
-from .protocol import command_variants
+from .protocol import clear_screen_candidates, command_variants
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,6 +77,9 @@ UNLOCK_SWEEP_SCHEMA = _DEVICE_SELECTOR.extend(
 
 COMMAND_SWEEP_SCHEMA = _DEVICE_SELECTOR.extend(
     {
+        vol.Optional("preset", default="clear_screen"): vol.In(
+            ["clear_screen", "opcode"]
+        ),
         vol.Optional("opcode", default="A504"): cv.string,
         vol.Optional("payloads"): vol.All(cv.ensure_list, [cv.string]),
         vol.Optional("settle", default=1.5): vol.All(
@@ -233,6 +236,9 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 ]
             except ValueError as err:
                 raise ServiceValidationError(f"payloads must be hex: {err}") from err
+        elif call.data["preset"] == "clear_screen":
+            # Both documented clear paths rather than byte permutations of one.
+            payloads = clear_screen_candidates()
         else:
             try:
                 opcode = int(call.data["opcode"].replace("0x", ""), 16)

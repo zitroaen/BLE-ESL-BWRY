@@ -232,6 +232,10 @@
         "settle": {
           "name": "Wartezeit",
           "description": "Sekunden nach jedem Schreibvorgang, bevor der Status zurückgelesen wird."
+        },
+        "preset": {
+          "name": "Kandidaten",
+          "description": "clear_screen probiert beide dokumentierten Löschwege (0xA504 und 0xA509 mit Index -2). opcode leitet stattdessen Byte-Reihenfolge-Varianten aus dem Opcode-Feld ab."
         }
       }
     },

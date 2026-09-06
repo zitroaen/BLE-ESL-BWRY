@@ -232,6 +232,10 @@
         "settle": {
           "name": "Settle time",
           "description": "Seconds to wait after each write before reading the status back."
+        },
+        "preset": {
+          "name": "Candidate set",
+          "description": "clear_screen tries both documented ways to clear the panel (0xA504 and 0xA509 with index -2). opcode derives byte order variants from the opcode field instead."
         }
       }
     },
