@@ -20,7 +20,11 @@ def _expected(variant: str) -> bytes:
 
 
 class FakeLabel:
-    """A label that only unlocks for one specific computation."""
+    """A label that only unlocks for one specific computation.
+
+    Mirrors the documented behaviour: a locked label accepts the unlock write,
+    then drops the link on the next write to any other characteristic.
+    """
 
     def __init__(self, accepts: str | None) -> None:
         self.is_connected = True
@@ -28,9 +32,15 @@ class FakeLabel:
         self.unlocked = False
         self.busy = False
         self.commands: list[bytes] = []
+        self.disconnects = 0
         attach_services(self)
 
+    def reconnect(self) -> None:
+        self.is_connected = True
+        self.unlocked = False
+
     async def disconnect(self):
+        self.disconnects += 1
         self.is_connected = False
 
     async def start_notify(self, uuid, cb):
@@ -52,10 +62,11 @@ class FakeLabel:
             )
             return
         self.commands.append(payload)
-        # A locked label accepts the write and does nothing, which is the
-        # behaviour observed on real hardware.
         if self.unlocked:
             self.busy = True
+        else:
+            # "writing other services will be disconnected immediately"
+            self.is_connected = False
 
 
 async def _setup(hass: HomeAssistant, entry):
@@ -72,6 +83,7 @@ def _patches(client):
         return object()
 
     async def fake_establish(*args, **kwargs):
+        client.reconnect()
         return client
 
     return (
@@ -134,15 +146,50 @@ async def test_sweep_reports_when_nothing_unlocks(
     assert len(report["results"]) == len(UNLOCK_VARIANTS)
 
 
+async def test_every_variant_gets_its_own_connection(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """Each variant must get a connection of its own.
+
+    A rejected unlock drops the link, so sharing one connection would only
+    ever test the first variant.
+    """
+    device = await _setup(hass, config_entry)
+    label = FakeLabel(accepts="encrypt_reversed")
+    report = await _sweep(hass, device, label)
+
+    # encrypt and decrypt come first and are rejected; each must still have
+    # been given a working connection of its own.
+    tried = [item["variant"] for item in report["results"]]
+    assert tried[:3] == ["encrypt", "decrypt", "encrypt_reversed"]
+    assert report["working_variant"] == "encrypt_reversed"
+
+    by_variant = {item["variant"]: item for item in report["results"]}
+    assert by_variant["encrypt"]["connected_after_command"] is False
+    assert "dropped the link" in by_variant["encrypt"]["note"]
+
+
+async def test_sweep_stops_at_the_first_working_variant(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """No point reconnecting for the rest once one works."""
+    device = await _setup(hass, config_entry)
+    report = await _sweep(hass, device, FakeLabel(accepts="encrypt"))
+
+    assert [item["variant"] for item in report["results"]] == ["encrypt"]
+
+
 async def test_sweep_records_the_challenge_and_every_response(
     hass: HomeAssistant, config_entry, mock_bluetooth
 ) -> None:
     """The report must be checkable by hand afterwards."""
     device = await _setup(hass, config_entry)
-    report = await _sweep(hass, device, FakeLabel(accepts="encrypt"))
+    report = await _sweep(hass, device, FakeLabel(accepts=None))
 
-    assert report["challenge"] == CHALLENGE.hex(" ")
+    # Each variant now has its own connection, so the challenge is recorded
+    # per attempt rather than once for the sweep.
     for item in report["results"]:
+        assert item["challenge"] == CHALLENGE.hex(" ")
         assert item["response"] == _expected(item["variant"]).hex(" ")
 
 

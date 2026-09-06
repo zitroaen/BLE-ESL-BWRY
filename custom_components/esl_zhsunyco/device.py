@@ -542,6 +542,7 @@ class ESLDevice:
         detail: str | None = None,
         status_before: dict[str, Any] | None = None,
         status_after: dict[str, Any] | None = None,
+        dropped: bool = False,
     ) -> None:
         """Remember how the last command went, for the diagnostics report."""
         record: dict[str, Any] = {
@@ -555,12 +556,24 @@ class ESLDevice:
             record["status_after"] = status_after
             became_busy = bool((status_after or {}).get("became_busy"))
             record["label_reacted"] = became_busy
-            record["interpretation"] = (
-                "the panel went busy, so it acted on the command"
-                if became_busy
-                else "the write was accepted but the panel never went busy; "
-                "the command was most likely not understood"
-            )
+            record["connection_dropped"] = dropped
+            if became_busy:
+                record["interpretation"] = (
+                    "the panel went busy, so it acted on the command"
+                )
+            elif dropped:
+                # The document: an unlocked label keeps the link; a locked one
+                # "will be disconnected immediately" on any other write.
+                record["interpretation"] = (
+                    "the label dropped the connection right after the write, "
+                    "which is what the document describes for a label that is "
+                    "still locked; the unlock was most likely not accepted"
+                )
+            else:
+                record["interpretation"] = (
+                    "the write was accepted but the panel never went busy; "
+                    "the command was most likely not understood"
+                )
         self.state.last_command = record
 
     async def _drop_connection_and_clear_cache(
@@ -614,7 +627,14 @@ class ESLDevice:
                 )
                 raise
 
-        self._record_command(kind, ok=True, status_before=before, status_after=after)
+        dropped = not self.connected
+        self._record_command(
+            kind,
+            ok=True,
+            status_before=before,
+            status_after=after,
+            dropped=dropped,
+        )
 
         # Reflect what the label reported, so the status sensor is current.
         final = after.get("final") or {}
@@ -732,13 +752,14 @@ class ESLDevice:
         """Try each unlock computation and see which one makes the label act.
 
         This answers the question the arithmetic cannot: our AES result has
-        been verified against the algorithm, but never against the label. A
-        label that stays locked accepts writes and ignores them, which is
-        exactly what has been observed.
+        been verified against the algorithm, never against the label. A label
+        that stays locked accepts the write and then, per the document,
+        "will be disconnected immediately" on any further write.
 
-        The challenge is fixed for the life of a connection, so every variant
-        can be tried in one connection: write the candidate response, send a
-        command, and watch the status characteristic.
+        That disconnect is why each variant needs its OWN connection. Trying
+        them in one connection only ever tests the first, because a rejected
+        unlock takes the link down with it. Reconnecting means waiting for the
+        label to advertise, so the whole sweep takes several minutes.
         """
         from .protocol import UNLOCK_VARIANTS, read_challenge
 
@@ -749,45 +770,51 @@ class ESLDevice:
         report: dict[str, Any] = {
             "address": self.address,
             "probe_command": probe_command.hex(" "),
+            "note": (
+                "one connection per variant, because a rejected unlock drops "
+                "the link; expect this to take several minutes"
+            ),
             "results": results,
         }
 
-        try:
-            # unlock=False: the sweep performs the unlock itself.
-            async with self.connection(unlock=False) as client:
-                challenge = await read_challenge(client)
-                report["challenge"] = challenge.hex(" ")
+        for name, compute in UNLOCK_VARIANTS.items():
+            entry: dict[str, Any] = {"variant": name}
+            try:
+                # A fresh connection each time: the challenge is per
+                # connection and a rejected unlock kills the previous one.
+                async with self.connection(unlock=False) as client:
+                    challenge = await read_challenge(client)
+                    entry["challenge"] = challenge.hex(" ")
+                    token = compute(challenge)
+                    entry["response"] = token.hex(" ")
 
-                for name, compute in UNLOCK_VARIANTS.items():
-                    entry: dict[str, Any] = {"variant": name}
-                    try:
-                        token = compute(challenge)
-                        entry["response"] = token.hex(" ")
-                        await client.write_gatt_char(UUID_SECURITY, token)
-                        await asyncio.sleep(settle)
-                        entry["status_after_unlock"] = await _read_status(client)
+                    await client.write_gatt_char(UUID_SECURITY, token)
+                    await asyncio.sleep(settle)
+                    entry["status_after_unlock"] = await _read_status(client)
+                    entry["connected_after_unlock"] = bool(client.is_connected)
 
-                        await protocol.send_command(
-                            client, probe_command, response=self.write_response
-                        )
-                        entry["command"] = "written"
-                        entry["status_after_command"] = await _watch_status(client)
-                        entry["label_reacted"] = bool(
-                            entry["status_after_command"].get("became_busy")
-                        )
-                    except Exception as err:  # noqa: BLE001 - report and continue
-                        entry["error"] = f"{type(err).__name__}: {err}"
-                        entry["label_reacted"] = False
-
-                    entry["still_connected"] = bool(
-                        getattr(client, "is_connected", True)
+                    await protocol.send_command(
+                        client, probe_command, response=self.write_response
                     )
-                    results.append(entry)
-                    if not entry["still_connected"]:
-                        entry["note"] = "label dropped the link after this variant"
-                        break
-        except Exception as err:  # noqa: BLE001 - the report is the deliverable
-            report["error"] = f"{type(err).__name__}: {err}"
+                    entry["status_after_command"] = await _watch_status(client)
+                    entry["connected_after_command"] = bool(client.is_connected)
+                    entry["label_reacted"] = bool(
+                        entry["status_after_command"].get("became_busy")
+                    )
+            except Exception as err:  # noqa: BLE001 - report and keep going
+                entry["error"] = f"{type(err).__name__}: {err}"
+                entry["label_reacted"] = False
+
+            # A drop right after the command is the locked-label signature.
+            if entry.get("connected_after_command") is False:
+                entry["note"] = "the label dropped the link after the command"
+            results.append(entry)
+
+            if entry.get("label_reacted"):
+                break
+
+            # Make sure the next variant starts from a clean connection.
+            await self._async_disconnect()
 
         winner = next(
             (item["variant"] for item in results if item.get("label_reacted")), None

@@ -323,6 +323,27 @@ Der Diagnose-Download baut seit 0.9.1 **keine Verbindung mehr auf**. Für
 einen Probe-Bericht den Button **Diagnose-Probe** verwenden; das Ergebnis
 landet dann auch in der Diagnose-Datei.
 
+### „Characteristic … was not found" beim Bildupload
+
+Das ist **kein** Cache-Problem, sondern eine Folge des gesperrten Labels.
+Deine Doku, Abschnitt 2:
+
+> „If it is not unlocked, writing other services will be disconnected
+> immediately."
+
+Beobachtung, die dazu passt:
+
+| Aktion | Writes auf Command | Ergebnis |
+|---|---|---|
+| Diagnose-Probe | 0 (nur Lesen + Security-Write) | funktioniert |
+| Bildschirm löschen / RGB | 1 | „ok", aber keine Reaktion |
+| Testbild | ~75 | „Characteristic not found" ab dem 2. |
+
+Der erste Command-Write bringt das Label dazu aufzulegen. Danach hat bleak
+keine Service-Tabelle mehr, und jeder weitere Write meldet die
+Charakteristik als nicht gefunden. Die Integration erkennt das jetzt und
+schreibt es in `last_command` unter `connection_dropped` samt Deutung.
+
 ### Das Label nimmt Kommandos an und tut nichts
 
 Beobachtet: Verbindung steht, Status ist lesbar, Fehlercode bleibt 0, aber
@@ -342,10 +363,14 @@ target:
   device_id: <dein Label>
 ```
 
-Probiert in **einer** Verbindung alle Varianten durch — `encrypt`,
-`decrypt`, jeweils mit umgekehrter Challenge, sowie den ungewandelten Echo —
-und schickt nach jeder ein Kommando, während der Status beobachtet wird. Die
-Challenge ist pro Verbindung konstant, deshalb geht das ohne Neuverbinden.
+Probiert alle Varianten durch — `encrypt`, `decrypt`, jeweils mit
+umgekehrter Challenge, `encrypt_then_reverse` und ein reines Echo — und
+schickt nach jeder ein Kommando, während der Status beobachtet wird.
+
+**Jede Variante bekommt eine eigene Verbindung**, weil ein abgelehntes
+Unlock die Verbindung mitnimmt. Der Sweep dauert dadurch **mehrere
+Minuten** (bei einem Advertisement-Intervall von rund einer Minute etwa
+6–7). Sobald eine Variante wirkt, bricht er ab.
 
 Das Ergebnis nennt `working_variant`. Diese lässt sich dann in den Optionen
 unter **Unlock-Berechnung** dauerhaft einstellen.
