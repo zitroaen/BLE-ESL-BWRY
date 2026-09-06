@@ -19,7 +19,8 @@ Abschnittsnummer kommentiert.
 | Version, Batterie, Status über eigene Charakteristiken | Abschn. IV–VI | ✅ |
 | RGB-LED `0xA508` | Abschn. 3.8 | ✅ |
 | Bildschirm löschen `0xA504` | Abschn. 3.7 | ✅ |
-| Bildupload `0xA500` / Refresh `0xA501` / `0xA502` | Abschn. 3.1–3.3 | ⚠️ Transport implementiert, Pixelformat experimentell |
+| Bildupload `0xA500` / Refresh `0xA501` | Abschn. 3.1–3.2 | ✅ |
+| Refresh komprimiert `0xA502` | Abschn. 3.3 | ⚠️ implementiert, Kompression ungetestet |
 | Testbilder ohne Bilddatei | – | ✅ |
 | Multi-Screen `0xA503` / `0xA509` | Abschn. 3.9–3.10 | ⚠️ implementiert, ungetestet |
 | OTA `0xA505`–`0xA507` | Abschn. 3.4–3.6 | ❌ bewusst nicht implementiert |
@@ -137,19 +138,19 @@ Diese Punkte sind im Herstellerdokument **nicht** spezifiziert und daher im
 Code als begründete Annahme umgesetzt. Sie sind bewusst an einer Stelle
 gebündelt, damit sie leicht korrigierbar sind:
 
-- **Pixelformat der Bilddaten.** Die Doku beschreibt nur den Transport. Die
-  Packung in `imaging.py` nimmt für BWRY-Panels 2 Bit pro Pixel mit der
-  Palettenreihenfolge Schwarz/Weiß/Gelb/Rot an, für andere Panels 1 Bit pro
-  Pixel. Anpassbar über `BWRY_PALETTE` und `MONO_BLACK_BIT`.
+- **Pixelformat für andere Panels als BWRY.** Für BWRY ist es keine Annahme
+  mehr: 2 Bit pro Pixel, MSB zuerst, zeilenweise, Palettenreihenfolge
+  Schwarz/Weiß/Gelb/Rot — am Gerät belegt (siehe unten). Für 1-Bit-Panels
+  ist die Packung weiterhin ungetestet; anpassbar über `MONO_BLACK_BIT`.
 - **Blockkomprimierung** (Abschn. 3.3/3.9) ist nicht beschrieben. In
   `rle.py` liegt der RLE-Codec der easyTag-Firmware desselben Herstellers als
   begründeter Kandidat — mit Encoder, Decoder und Round-Trip-Tests, aber
   ungetestet gegen diese Hardware. Übertragen wird bisher ausschließlich
   unkomprimiert über `0xA501`.
-- **Byte-Reihenfolge** von `on_ms`/`off_ms`/`work_ms` (Abschn. 3.8) und der
-  Bildgröße (Abschn. 3.2) — angenommen wird Little Endian, passend zum
-  4-Byte-Datenzeiger. Achtung: Das Gerät mischt die Byte-Reihenfolgen (siehe
-  unten), diese Annahme ist also nicht sicher.
+- ~~**Byte-Reihenfolge** von `on_ms`/`off_ms`/`work_ms` (Abschn. 3.8) und der
+  Bildgröße (Abschn. 3.2).~~ Erledigt: Little Endian, am Gerät belegt — die
+  LED reagiert auf das 13-Byte-Layout und `01 a5` + Größe frischt das Panel
+  auf.
 - **Company Identifier** im Advertisement: Die Doku nennt `0xbbaa` für Byte
   0–1. Bestätigt: Home Assistant meldet `0xBBAA`.
 - **Slot-Header** `PIC0x\0` (Abschn. 3.9) lässt bei Index 10 nur eine Ziffer
@@ -574,10 +575,19 @@ sind: die andere Integration für das Label testweise deaktivieren.
 
 ### LED und Bildschirm löschen bleiben wirkungslos
 
-Wenn die Sensoren aktualisieren, Kommandos aber nichts bewirken, akzeptiert
-das Label vermutlich nur einen der beiden ATT-Schreibtypen. In den Optionen
-der Integration lässt sich der **Schreibmodus für Kommandos** von
-`Automatisch` auf `Ohne Bestätigung` bzw. `Mit Bestätigung` umstellen.
+Beide sind an einem BLE-35BWRY belegt und funktionieren, seit die Opcodes in
+0.19.0 auf Little-Endian umgestellt wurden. Wenn sie bei dir wirkungslos
+bleiben:
+
+1. **Version prüfen.** Vor 0.19.0 hat die Integration `a5 04` statt `04 a5`
+   geschickt — das Label nimmt den Write an und tut nichts.
+2. **`unlock_verified` in der Diagnose prüfen.** Steht dort `false`, ist das
+   Label gesperrt und ignoriert grundsätzlich jedes Kommando.
+3. **`last_command` in der Diagnose lesen.** `label_reacted: false` heißt,
+   das Panel ist nach dem Kommando nie `busy` geworden.
+
+Handelt es sich um ein **anderes Modell**, ist die Byte-Reihenfolge dort
+nicht gemessen. Dann hilft `debug_command_sweep` (siehe oben).
 
 ### Debug-Logging aktivieren
 

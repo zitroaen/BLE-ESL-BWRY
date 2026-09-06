@@ -194,11 +194,12 @@ async def set_rgb(
 ) -> None:
     """Drive the RGB LED, command 0xA508 (section 3.8).
 
-    Layout: A5 08 | R 1B | G 1B | B 1B | on_ms 2B | off_ms 2B | work_ms 4B.
+    Layout: 08 A5 | R 1B | G 1B | B 1B | on_ms 2B | off_ms 2B | work_ms 4B.
 
     The document does not state the byte order of the three timing fields.
-    Little endian is assumed here, consistent with the 4 byte data pointer
-    used by the image commands.
+    Little endian, consistent with the opcode and the 4 byte data pointer:
+    verified on a BLE-35BWRY through Home Assistant, the LED lit on this
+    exact 13 byte frame.
     """
     payload = CMD_RGB + bytes((red & 0xFF, green & 0xFF, blue & 0xFF))
     payload += struct.pack(
@@ -255,8 +256,8 @@ async def send_image(
     """Store and refresh a single full-screen image (sections 3.1 - 3.3).
 
     ``data`` must already be packed in the panel's native pixel format. The
-    document does not specify that format, so packing lives in ``imaging.py``
-    and is considered experimental.
+    document does not specify that format; for BWRY panels ``imaging.py``
+    has been verified against hardware, for 1 bit panels it has not.
     """
     await _store_blocks(client, CMD_IMAGE_STORE, data)
     await asyncio.sleep(PRE_REFRESH_DELAY_S)
@@ -339,15 +340,17 @@ def clear_screen_candidates() -> list[bytes]:
     path the firmware actually implements. Signed -2 and -1 are 0xFE and
     0xFF on the wire.
 
-    Commands go out little endian - measured for 0xA500 and 0xA501, see
-    docs/hardware-verified-findings.md section 3 - so the little endian
-    forms lead. Clear screen itself has never been measured in either
-    order, which is the whole reason this sweep still exists.
+    Commands go out little endian, 04 a5 for clear screen included: that is
+    now measured for 0xA500, 0xA501, 0xA504 and 0xA508. See
+    docs/hardware-verified-findings.md sections 3 and 10.
 
     An earlier revision marked 04 a5 "known rejected". That verdict came
     from a sweep that wrote a5 04 first on the same connection; a rejected
     command revokes authorisation, so 04 a5 was judged on a link that was
     already dead. It was never tested cleanly.
+
+    The list stays for the opcodes that are still unmeasured - 0xA502 and
+    the multi-screen pair - and as the tool for the next unknown one.
     """
     return [
         bytes((0x04, 0xA5)),  # 3.7, little endian like the verified commands

@@ -294,12 +294,61 @@ anderes sinnvoll testen), dann #3, dann der Rest.
 
 ## 9. Offene Punkte
 
-- **Clear Screen** (`0xA504`) wurde in keiner Byte-Reihenfolge getestet. Vor #1
-  wäre ein A/B-Test `a5 04` gegen `04 a5` auf je eigener Verbindung sinnvoll.
+*Stand des ursprünglichen Messlaufs. Was davon Abschnitt 10 erledigt hat, ist
+dort vermerkt.*
+
+- ~~**Clear Screen** (`0xA504`) wurde in keiner Byte-Reihenfolge getestet.~~
+  Erledigt in Abschnitt 10.
 - **`0xA502`** (blockkomprimiert) und die Kompression selbst sind unberührt —
   das Herstellerdokument beschreibt das Verfahren nicht.
 - **Multi-Screen** (`0xA503` / `0xA509`, Slot-Header `PIC0x\0`) ungetestet.
-- **RGB-LED** (`0xA508`) ungetestet. Das Timing-Layout gilt weiter als Annahme.
-- Alle Messungen stammen von **einem** Exemplar über einen **direkten** Adapter.
-  Verhalten über einen ESPHome-Proxy kann abweichen, besonders bei MTU und
-  Timing.
+- ~~**RGB-LED** (`0xA508`) ungetestet.~~ Erledigt in Abschnitt 10.
+- ~~Alle Messungen stammen von **einem** Exemplar über einen **direkten**
+  Adapter.~~ Abschnitt 10 deckt den Proxy-Pfad ab.
+
+---
+
+## 10. Nachtrag: derselbe Stand über Home Assistant
+
+Zweiter Messlauf, **2026-09-06**, nach der Umsetzung in 0.19.0. Anderer
+Aufbau als oben und damit ein eigenständiger Beleg:
+
+| | |
+|---|---|
+| Weg | Home Assistant → **ESPHome-Bluetooth-Proxy** → Label |
+| Software | diese Integration, v0.19.0, kein Hilfsskript |
+| Beleg | Foto des Panels, Rückmeldung zu LED und Löschen |
+
+### Was damit belegt ist
+
+**Der Bildpfad funktioniert durch die Integration hindurch.** Auf dem Panel
+steht das `diagnostic`-Muster aus `patterns.py`, gerendert von `imaging.py`:
+Rahmen, Eckkeil, die vier Farbblöcke, zwei 1-Pixel-Gitter und die
+Beschriftung `ESL 184x384`. Das Muster ist absichtlich diagnostisch gebaut,
+also lässt sich einiges direkt ablesen:
+
+| Beobachtung im Foto | Was sie ausschließt |
+|---|---|
+| Rahmen umlaufend geschlossen | Breite/Höhe nicht vertauscht, ganze Fläche adressiert |
+| Blöcke in der Reihenfolge Schwarz, Rot, Gelb, Weiß | Palettenzuordnung stimmt (Gegenprobe zu Abschn. 4) |
+| **waagerechtes** 1-Pixel-Gitter scharf, kein Verwischen | Zeilenlänge 46 Byte stimmt |
+| **senkrechtes** 1-Pixel-Gitter scharf, kein Versatz | Bitreihenfolge MSB-zuerst stimmt |
+
+Ein einzelner Pixelfehler wäre in genau diesen Gittern sichtbar und sonst
+nirgends. Beide sind sauber — das bestätigt `_pack_bwry()` unabhängig vom
+Referenzskript aus Abschnitt 4.
+
+### `0xA504` und `0xA508`
+
+Beide wirken, in Little-Endian:
+
+- **Löschen** `04 a5` — die letzte offene Frage zur Byte-Reihenfolge. Das
+  Muster in Abschnitt 3 gilt damit für alle vier gemessenen Opcodes.
+- **RGB-LED** `08 a5` + R + G + B + on_ms 2B + off_ms 2B + work_ms 4B, alle
+  Zeitfelder Little-Endian. Das 13-Byte-Layout war bis hier eine Annahme.
+
+### Und der Proxy-Vorbehalt ist ausgeräumt
+
+Abschnitt 9 hielt fest, dass alle Messungen über einen direkten Adapter
+liefen und der Proxy besonders bei MTU und Timing abweichen könnte. Tut er
+nicht: dieselben 180-Byte-Scheiben, dieselben Frames, dasselbe Ergebnis.
