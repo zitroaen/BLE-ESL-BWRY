@@ -15,14 +15,6 @@ CONF_MODEL: Final = "model"
 CONF_SCAN_INTERVAL_MIN: Final = "scan_interval_min"
 CONF_LINGER_S: Final = "linger_s"
 
-# The document says the challenge is unlocked with AES-128-ECB "encryption",
-# but that is a translation and the label ignores writes silently when it
-# stays locked, so the alternatives have to be reachable.
-
-# How long the connection is held open after a command. Reconnecting means
-# waiting for the label to advertise again, which dominates everything else,
-# so a short linger makes a burst of commands feel instant. It does occupy a
-# proxy connection slot and costs the label some battery, hence not forever.
 # How long the connection is held open after a command. It has to be short:
 # a connected BLE device stops advertising entirely, so every second spent
 # lingering is a second in which nothing - not even Home Assistant's own
@@ -31,9 +23,6 @@ CONF_LINGER_S: Final = "linger_s"
 # See docs/hardware-verified-findings.md sections 6 and 7.1.
 DEFAULT_LINGER_S: Final = 15
 
-# How commands are written. The document does not say which ATT write type
-# the label expects, and a label that only handles one of them silently
-# ignores the other, so this is exposed as an option.
 # Keys used by the pre-HACS prototype, kept only for entry migration.
 LEGACY_CONF_MAC: Final = "mac_address"
 LEGACY_CONF_BATTERY_INTERVAL: Final = "battery_scan_interval"

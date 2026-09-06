@@ -6,6 +6,10 @@ it and one central one was overturned.
 
 Everything below was reproduced on **2026-09-06** on a physical BLE-35BWRY.
 
+This is the **evidence**, including how each conclusion was reached and one
+that had to be overturned. For the interface itself, without the working
+out, see [`protocol.md`](protocol.md).
+
 ## Test setup
 
 | | |
