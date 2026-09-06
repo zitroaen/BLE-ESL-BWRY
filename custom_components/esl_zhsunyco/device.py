@@ -883,62 +883,74 @@ class ESLDevice:
         response: bool | None = None,
         settle: float = 1.5,
     ) -> dict[str, Any]:
-        """Send several command encodings in one connection and watch status.
+        """Send each command encoding on its own connection and watch status.
 
-        Waking the label is the expensive part, so every candidate is tried
-        inside a single connection. The status characteristic is the label's
-        own feedback: if busy or the error code never move, the command was
-        not understood. A disconnect right after one payload is a signal in
-        itself, since the label drops writes it rejects.
+        One connection per candidate, for the same reason the unlock sweep
+        needs it: a rejected command makes the label revoke authorisation.
+        Measured on hardware, writing 04 a5 was followed by the label
+        answering the next plain READ with ATT error 0x08, insufficient
+        authorization. Everything tried after that in the same connection
+        would be meaningless.
         """
         if response is None:
             response = self.write_response
 
         results: list[dict[str, Any]] = []
-        report: dict[str, Any] = {"address": self.address, "results": results}
+        report: dict[str, Any] = {
+            "address": self.address,
+            "note": (
+                "one connection per candidate: a rejected command revokes the "
+                "unlock, so later candidates on the same link prove nothing"
+            ),
+            "results": results,
+        }
 
-        async def read_status_safe(client) -> dict[str, Any]:
+        for payload in payloads:
+            entry: dict[str, Any] = {"payload": payload.hex(" ")}
             try:
-                raw = bytes(await client.read_gatt_char(UUID_STATUS))
-            except Exception as err:  # noqa: BLE001 - part of the observation
-                return {"error": f"{type(err).__name__}: {err}"}
-            return {
-                "raw": raw[:8].hex(" "),
-                "busy": bool(raw[0]) if raw else None,
-                "error_code": raw[1] if len(raw) > 1 else None,
-            }
+                async with self.connection() as client:
+                    entry["unlock_verified"] = self.state.unlock_verified
+                    entry["status_before"] = await _read_status(client)
 
-        try:
-            async with self.connection() as client:
-                for payload in payloads:
-                    entry: dict[str, Any] = {"payload": payload.hex(" ")}
-                    entry["status_before"] = await read_status_safe(client)
-                    try:
-                        await protocol.send_command(client, payload, response=response)
-                        entry["write"] = "ok"
-                    except Exception as err:  # noqa: BLE001 - report, keep going
-                        entry["write"] = f"{type(err).__name__}: {err}"
+                    await protocol.send_command(client, payload, response=response)
+                    entry["write"] = "ok"
 
                     await asyncio.sleep(settle)
-                    entry["status_after"] = await read_status_safe(client)
-                    entry["status_changed"] = (
-                        entry["status_before"] != entry["status_after"]
-                    )
+                    watched = await _watch_status(client)
+                    entry["status_after"] = watched
+                    entry["label_reacted"] = bool(watched.get("became_busy"))
                     entry["connected_after"] = bool(
                         getattr(client, "is_connected", True)
                     )
-                    results.append(entry)
+            except Exception as err:  # noqa: BLE001 - report and keep going
+                entry["error"] = f"{type(err).__name__}: {err}"
+                entry["label_reacted"] = False
 
-                    if not entry["connected_after"]:
-                        entry["note"] = (
-                            "label dropped the connection after this payload"
-                        )
-                        break
-        except Exception as err:  # noqa: BLE001 - the report is the deliverable
-            report["error"] = f"{type(err).__name__}: {err}"
+            entry["rejected"] = _looks_rejected(entry)
+            results.append(entry)
+            if entry.get("label_reacted"):
+                break
 
-        report["any_status_changed"] = any(
-            item.get("status_changed") for item in results
+            # A rejected command leaves the label unwilling to talk; start the
+            # next candidate from a clean connection.
+            await self._async_disconnect()
+
+        winner = next(
+            (item["payload"] for item in results if item.get("label_reacted")), None
+        )
+        report["working_payload"] = winner
+        report["any_status_changed"] = winner is not None
+        tolerated = [
+            item["payload"]
+            for item in results
+            if not item.get("rejected") and not item.get("label_reacted")
+        ]
+        report["tolerated_but_ignored"] = tolerated
+        report["conclusion"] = (
+            f"the label acted on {winner}"
+            if winner
+            else "no candidate made the panel react; "
+            f"tolerated without reaction: {tolerated or 'none'}"
         )
         self.state.last_command = report
         _LOGGER.warning("ESL command sweep %s: %s", self.address, report)
@@ -1064,6 +1076,19 @@ async def _watch_status(client: BleakClientWithServiceCache) -> dict[str, Any]:
         "final": samples[-1] if samples else None,
         "samples": len(samples),
     }
+
+
+# ATT error 0x08. The label answers with this once it decides a client is no
+# longer authorised, which it does after a command it rejects.
+_REJECTION_MARKERS = ("insufficient authorization", "insufficient authentication")
+
+
+def _looks_rejected(entry: dict[str, Any]) -> bool:
+    """Report whether the label revoked access rather than just ignoring it."""
+    text = repr(entry).lower()
+    if any(marker in text for marker in _REJECTION_MARKERS):
+        return True
+    return entry.get("connected_after") is False
 
 
 async def _async_close(client: BleakClientWithServiceCache, address: str) -> None:

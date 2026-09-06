@@ -377,6 +377,27 @@ keine Service-Tabelle mehr, und jeder weitere Write meldet die
 Charakteristik als nicht gefunden. Die Integration erkennt das jetzt und
 schreibt es in `last_command` unter `connection_dropped` samt Deutung.
 
+### Das Label entzieht die Autorisierung
+
+Gemessen: Nach dem Schreiben von `04 a5` beantwortet das Label schon das
+nächste **Lesen** mit einem ATT-Fehler:
+
+```
+BluetoothGATTErrorResponse: Insufficient authorization (8)
+```
+
+Das ist ATT-Fehlercode 0x08 und kommt vom Label selbst. Ein abgelehntes
+Kommando macht also das Unlock zunichte. `a5 04` löst das **nicht** aus —
+ein Hinweis darauf, dass die Byte-Reihenfolge wie dokumentiert stimmt.
+
+Daraus folgen zwei Dinge, beide seit 0.17.0 umgesetzt:
+
+- Der Kommando-Sweep verwendet **eine Verbindung pro Kandidat**. Vorher
+  waren alle Kandidaten nach dem ersten abgelehnten wertlos.
+- Der Report unterscheidet jetzt zwischen `rejected` (Label entzieht den
+  Zugriff) und `tolerated_but_ignored` (Kommando angenommen, aber wirkungslos).
+  Nur Letzteres ist ein Hinweis auf eine richtige Kodierung.
+
 ### Das Label nimmt Kommandos an und tut nichts
 
 Beobachtet: Verbindung steht, Status ist lesbar, Fehlercode bleibt 0, aber
