@@ -43,13 +43,13 @@ def test_battery_candidates_handle_short_input():
 
 def test_describe_advertisement_scans_every_offset():
     """The report must let a shifted layout be spotted by eye."""
-    payload = struct.pack("<HHHHH", 0xAB01, 0x0102, 0x0203, 0x0304, 2950)
+    payload = struct.pack(">HHHHH", 0xAB01, 0x0102, 0x0203, 0x0304, 2950)
     report = protocol.describe_advertisement(payload)
 
     assert report["length"] == 10
     assert report["documented_layout_valid"] is True
-    assert report["documented"]["battery_raw_le"] == 2950
-    assert report["documented"]["pid"] == "0xAB01"
+    assert report["parsed"]["battery_mv"] == 2950
+    assert report["parsed"]["pid"] == "0xAB01"
     # Offsets 0, 2, 4, 6, 8 must all be reported.
     assert set(report["battery_by_offset_v"]) == {
         "offset_0",
@@ -58,7 +58,7 @@ def test_describe_advertisement_scans_every_offset():
         "offset_6",
         "offset_8",
     }
-    assert report["battery_by_offset_v"]["offset_8"]["le_mv"] == 2.95
+    assert report["battery_by_offset_v"]["offset_8"]["be_mv"] == 2.95
 
 
 def test_describe_advertisement_survives_short_payload():
@@ -203,6 +203,49 @@ def test_probe_reports_unknown_family():
     report = asyncio.run(protocol.probe_device(client))
 
     assert report["protocol_family"]["detected"] == const.PROTOCOL_UNKNOWN
+
+
+REAL_ADVERT = bytes.fromhex("300000 0e0330 02010b93".replace(" ", ""))
+REAL_BATTERY_CHARACTERISTIC_MV = 2963
+
+
+def test_real_advertisement_matches_battery_characteristic():
+    """Captured hardware data: the advertisement must agree with the poll.
+
+    Advertisement 30 00 00 0e 03 30 02 01 0b 93 was seen while the battery
+    characteristic reported 2963 mV. Big endian at offset 8 is the only two
+    byte window in the payload that produces that number.
+    """
+    assert REAL_ADVERT.hex(" ") == "30 00 00 0e 03 30 02 01 0b 93"
+
+    parsed = protocol.parse_advertisement(REAL_ADVERT)
+    assert parsed is not None
+    _version, battery_mv = parsed
+    assert battery_mv == REAL_BATTERY_CHARACTERISTIC_MV
+    assert round(battery_mv / 1000, 3) == 2.963
+
+
+def test_no_little_endian_window_yields_the_true_battery():
+    """Guards the reasoning: little endian cannot explain the measurement."""
+    little = [
+        int.from_bytes(REAL_ADVERT[offset : offset + 2], "little")
+        for offset in range(len(REAL_ADVERT) - 1)
+    ]
+    assert REAL_BATTERY_CHARACTERISTIC_MV not in little
+
+    big = [
+        int.from_bytes(REAL_ADVERT[offset : offset + 2], "big")
+        for offset in range(len(REAL_ADVERT) - 1)
+    ]
+    assert big.count(REAL_BATTERY_CHARACTERISTIC_MV) == 1
+    assert big.index(REAL_BATTERY_CHARACTERISTIC_MV) == 8
+
+
+def test_real_advertisement_report_is_labelled():
+    """The report must say which byte order was used and why."""
+    report = protocol.describe_advertisement(REAL_ADVERT)
+    assert report["parsed"]["battery_mv"] == REAL_BATTERY_CHARACTERISTIC_MV
+    assert "big endian" in report["parsed"]["byte_order"]
 
 
 if __name__ == "__main__":

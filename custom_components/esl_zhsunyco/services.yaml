@@ -72,3 +72,19 @@ debug_probe:
   target:
     device:
       integration: esl_zhsunyco
+
+debug_command:
+  target:
+    device:
+      integration: esl_zhsunyco
+  fields:
+    payload:
+      required: true
+      example: "a5 04"
+      selector:
+        text:
+    expect_response:
+      required: false
+      default: true
+      selector:
+        boolean:

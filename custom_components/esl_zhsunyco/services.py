@@ -19,6 +19,7 @@ from .const import (
     RGB_WORK_MS_MAX,
     RGB_WORK_MS_MIN,
     SERVICE_CLEAR_SCREEN,
+    SERVICE_DEBUG_COMMAND,
     SERVICE_DEBUG_PROBE,
     SERVICE_SET_IMAGE,
     SERVICE_SET_RGB,
@@ -57,6 +58,13 @@ SET_RGB_SCHEMA = _DEVICE_SELECTOR.extend(
 
 CLEAR_SCREEN_SCHEMA = _DEVICE_SELECTOR
 DEBUG_PROBE_SCHEMA = _DEVICE_SELECTOR
+
+DEBUG_COMMAND_SCHEMA = _DEVICE_SELECTOR.extend(
+    {
+        vol.Required("payload"): cv.string,
+        vol.Optional("expect_response", default=True): cv.boolean,
+    }
+)
 
 SET_IMAGE_SCHEMA = _DEVICE_SELECTOR.extend(
     {
@@ -122,6 +130,28 @@ def async_setup_services(hass: HomeAssistant) -> None:
         for device in _resolve_devices(hass, call):
             await async_probe_and_notify(hass, device)
 
+    async def _debug_command(call: ServiceCall) -> None:
+        """Write raw bytes to the command characteristic.
+
+        The document leaves the exact command encoding open in places, so
+        this makes trying a variant a one line service call instead of a
+        release. Example payload: "a5 04" for clear screen.
+        """
+        text = call.data["payload"].replace(" ", "").replace(":", "")
+        try:
+            payload = bytes.fromhex(text)
+        except ValueError as err:
+            raise ServiceValidationError(
+                f"payload must be hex, got {call.data['payload']!r}"
+            ) from err
+        if not payload:
+            raise ServiceValidationError("payload must not be empty")
+
+        for device in _resolve_devices(hass, call):
+            await device.async_send_raw_command(
+                payload, expect_response=call.data["expect_response"]
+            )
+
     async def _set_image(call: ServiceCall) -> None:
         path = call.data["path"]
         if not hass.config.is_allowed_path(path):
@@ -148,4 +178,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN, SERVICE_DEBUG_PROBE, _debug_probe, schema=DEBUG_PROBE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_DEBUG_COMMAND, _debug_command, schema=DEBUG_COMMAND_SCHEMA
     )

@@ -348,6 +348,23 @@ class ESLDevice:
             await protocol.send_image(client, data, compressed=False)
         _LOGGER.debug("%s image uploaded (%d bytes)", self.address, len(data))
 
+    async def async_send_raw_command(
+        self, payload: bytes, *, expect_response: bool = True
+    ) -> None:
+        """Write arbitrary bytes to the command characteristic.
+
+        Only for working out an encoding the document leaves open; nothing
+        in the integration uses this path.
+        """
+        async with self.connection() as client:
+            await protocol.send_command(client, payload, response=expect_response)
+        _LOGGER.warning(
+            "Raw command sent to %s: %s (response=%s)",
+            self.address,
+            payload.hex(" "),
+            expect_response,
+        )
+
     async def async_probe(self) -> dict[str, Any]:
         """Collect a full diagnostic report.
 

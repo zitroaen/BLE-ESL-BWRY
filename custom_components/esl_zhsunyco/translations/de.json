@@ -149,6 +149,20 @@
     "debug_probe": {
       "name": "Diagnose-Probe",
       "description": "Verbindet sich, listet die GATT-Tabelle auf, liest alle Charakteristiken und zeigt das Ergebnis als Benachrichtigung. Für die Fehlersuche."
+    },
+    "debug_command": {
+      "name": "Roh-Kommando",
+      "description": "Schreibt rohe Hex-Bytes auf die Command-Charakteristik. Zum Ermitteln einer Kodierung, die die Hersteller-Doku offenlässt.",
+      "fields": {
+        "payload": {
+          "name": "Nutzdaten",
+          "description": "Kommando-Bytes als Hex, zum Beispiel 'a5 04'."
+        },
+        "expect_response": {
+          "name": "Mit Bestätigung schreiben",
+          "description": "Ob ein ATT-Write mit Bestätigung verwendet wird."
+        }
+      }
     }
   },
   "selector": {

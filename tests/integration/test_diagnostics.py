@@ -5,6 +5,7 @@ from __future__ import annotations
 import struct
 from types import SimpleNamespace
 
+import voluptuous as vol
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.components.diagnostics import (
     get_diagnostics_for_config_entry,
@@ -31,7 +32,9 @@ async def test_diagnostics_include_raw_advertisement(
     """The raw bytes must be downloadable so a wrong layout can be spotted."""
     device = await _setup(hass, config_entry)
 
-    payload = struct.pack("<HHHHH", 0xAB01, 0x0102, 0x0203, 0x0304, 29200)
+    # The advertisement captured from real hardware, alongside a battery
+    # characteristic that read 2963 mV.
+    payload = bytes.fromhex("30000 00e033002010b93".replace(" ", ""))
     device._advert_received(
         SimpleNamespace(rssi=-55, manufacturer_data={MANUFACTURER_ID: payload}), None
     )
@@ -40,13 +43,15 @@ async def test_diagnostics_include_raw_advertisement(
     result = await get_diagnostics_for_config_entry(hass, hass_client, config_entry)
 
     advert = result["advertisement"]
-    assert advert["raw_by_company_id"]["0xBBAA"] == payload.hex(" ")
-    # The implausible documented reading and both alternatives must be visible.
-    candidates = advert["decoded"]["documented"]["battery_candidates_v"]
-    assert candidates["le_mv"] == 29.2
-    assert candidates["be_mv"] == 4.21
-    assert candidates["le_tenth_mv"] == 2.92
+    assert advert["raw_by_company_id"]["0xBBAA"] == "30 00 00 0e 03 30 02 01 0b 93"
+    assert advert["decoded"]["parsed"]["battery_mv"] == 2963
+    assert advert["decoded"]["battery_by_offset_v"]["offset_8"]["be_mv"] == 2.963
     assert "battery_candidate_meanings" in result
+
+    # The sensor must now agree with what the poll reads over GATT.
+    assert hass.states.get("sensor.esl_66_66_54_20_00_55_battery_voltage").state == (
+        "2.963"
+    )
 
 
 async def test_diagnostics_redact_address(
@@ -125,7 +130,7 @@ async def test_probe_includes_advertisement_without_connection(
     """Advertisement data stays useful even when connecting fails."""
     device = await _setup(hass, config_entry)
 
-    payload = struct.pack("<HHHHH", 0xAB01, 0x0102, 0x0203, 0x0304, 29200)
+    payload = struct.pack(">HHHHH", 0xAB01, 0x0102, 0x0203, 0x0304, 29200)
     device._advert_received(
         SimpleNamespace(rssi=-55, manufacturer_data={MANUFACTURER_ID: payload}), None
     )
@@ -134,3 +139,90 @@ async def test_probe_includes_advertisement_without_connection(
     report = await device.async_probe()
     assert report["connection"] == "failed"
     assert report["advertisement"]["raw_by_company_id"]["0xBBAA"] == payload.hex(" ")
+
+
+async def test_diagnostics_runs_a_probe_when_none_is_cached(
+    hass: HomeAssistant, hass_client, config_entry, mock_bluetooth
+) -> None:
+    """Downloading diagnostics must not omit the probe section."""
+    device = await _setup(hass, config_entry)
+    assert device.state.last_probe is None
+
+    result = await get_diagnostics_for_config_entry(hass, hass_client, config_entry)
+
+    assert result["last_probe"] is not None
+    assert result["last_probe"]["connection"] == "failed"
+
+
+async def test_debug_command_rejects_non_hex(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """A typo in the payload must be reported, not written to the label."""
+    from homeassistant.exceptions import ServiceValidationError
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.esl_zhsunyco.const import DOMAIN, SERVICE_DEBUG_COMMAND
+
+    await _setup(hass, config_entry)
+    device_entry = dr.async_entries_for_config_entry(
+        dr.async_get(hass), config_entry.entry_id
+    )[0]
+
+    for bad in ("nothex", ""):
+        try:
+            await hass.services.async_call(
+                DOMAIN,
+                SERVICE_DEBUG_COMMAND,
+                {"device_id": device_entry.id, "payload": bad},
+                blocking=True,
+            )
+        except (ServiceValidationError, vol.Invalid):
+            continue
+        raise AssertionError(f"expected a validation error for {bad!r}")
+
+
+async def test_debug_command_sends_the_given_bytes(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """Hex with separators must reach the characteristic verbatim."""
+    from unittest.mock import AsyncMock, patch
+
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.esl_zhsunyco.const import DOMAIN, SERVICE_DEBUG_COMMAND
+
+    await _setup(hass, config_entry)
+    device_entry = dr.async_entries_for_config_entry(
+        dr.async_get(hass), config_entry.entry_id
+    )[0]
+
+    sent: list[tuple] = []
+
+    async def fake_send(client, payload, *, response=None):
+        sent.append((bytes(payload), response))
+
+    with (
+        patch(
+            "custom_components.esl_zhsunyco.device.protocol.send_command", new=fake_send
+        ),
+        patch(
+            "custom_components.esl_zhsunyco.device._ESLConnection.__aenter__",
+            new=AsyncMock(return_value=object()),
+        ),
+        patch(
+            "custom_components.esl_zhsunyco.device._ESLConnection.__aexit__",
+            new=AsyncMock(return_value=False),
+        ),
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_DEBUG_COMMAND,
+            {
+                "device_id": device_entry.id,
+                "payload": "a5 04",
+                "expect_response": False,
+            },
+            blocking=True,
+        )
+
+    assert sent == [(b"\xa5\x04", False)]

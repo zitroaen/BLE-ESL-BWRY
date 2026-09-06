@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
@@ -11,7 +13,12 @@ from homeassistant.core import HomeAssistant
 from .device import ESLDevice
 from .protocol import BATTERY_CANDIDATES
 
+_LOGGER = logging.getLogger(__name__)
+
 TO_REDACT = {"address"}
+
+# A probe needs a connection; keep it well inside any frontend timeout.
+PROBE_TIMEOUT = 25.0
 
 
 async def async_get_config_entry_diagnostics(
@@ -20,6 +27,17 @@ async def async_get_config_entry_diagnostics(
     """Return everything needed to debug a label without shell access."""
     device: ESLDevice = entry.runtime_data
     state = device.state
+
+    # Run a probe if none is cached. Downloading diagnostics is the step a
+    # user actually performs, so it should not silently omit the one section
+    # that answers which protocol the label speaks.
+    if state.last_probe is None:
+        try:
+            async with asyncio.timeout(PROBE_TIMEOUT):
+                await device.async_probe()
+        except TimeoutError:
+            _LOGGER.warning("Probe for diagnostics timed out after %ss", PROBE_TIMEOUT)
+            state.last_probe = {"error": f"probe timed out after {PROBE_TIMEOUT}s"}
 
     return {
         "entry": {

@@ -147,13 +147,29 @@ gebündelt, damit sie leicht korrigierbar sind:
   unkomprimiert über `0xA501`.
 - **Byte-Reihenfolge** von `on_ms`/`off_ms`/`work_ms` (Abschn. 3.8) und der
   Bildgröße (Abschn. 3.2) — angenommen wird Little Endian, passend zum
-  4-Byte-Datenzeiger.
+  4-Byte-Datenzeiger. Achtung: Das Gerät mischt die Byte-Reihenfolgen (siehe
+  unten), diese Annahme ist also nicht sicher.
 - **Company Identifier** im Advertisement: Die Doku nennt `0xbbaa` für Byte
-  0–1. Die Integration akzeptiert sowohl `0xBBAA` als auch `0xAABB`.
+  0–1. Bestätigt: Home Assistant meldet `0xBBAA`.
 - **Slot-Header** `PIC0x\0` (Abschn. 3.9) lässt bei Index 10 nur eine Ziffer
   zu; implementiert ist zweistellig, also `PIC00`…`PIC10`.
 - **Panel-Auflösungen** in `const.py` stammen nicht aus der Doku und können
   je nach Gerät abweichen.
+
+## Bestätigt gegen echte Hardware
+
+**Das Advertisement ist Big Endian, die Charakteristiken sind Little
+Endian.** Die Doku sagt zu beidem nichts. Nachgewiesen an einem Gerät, das
+gleichzeitig meldete:
+
+```
+Advertisement:            30 00 00 0e 03 30 02 01 0b 93
+Batterie-Charakteristik:  2963 mV  (Little Endian gelesen)
+```
+
+`0b 93` an Offset 8 ergibt Big Endian gelesen 2963 — und das ist das
+**einzige** Zwei-Byte-Fenster im gesamten Advertisement, das diesen Wert
+liefert. Little Endian ergäbe dort 37643, also 37,6 V.
 
 ## Fehlersuche
 
