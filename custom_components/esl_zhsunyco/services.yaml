@@ -51,12 +51,29 @@ set_image:
       example: /config/www/label.png
       selector:
         text:
+    encoding:
+      required: false
+      default: auto
+      selector:
+        select:
+          options: [auto, mono, bwry_packed, bwry_planes]
+    bit_order:
+      required: false
+      default: msb
+      selector:
+        select:
+          options: [msb, lsb]
     rotate:
       required: false
       default: 0
       selector:
         select:
           options: ["0", "90", "180", "270"]
+    mirror:
+      required: false
+      default: false
+      selector:
+        boolean:
     invert:
       required: false
       default: false
@@ -84,6 +101,60 @@ debug_command:
       selector:
         text:
     expect_response:
+      required: false
+      default: true
+      selector:
+        boolean:
+
+send_test_pattern:
+  target:
+    device:
+      integration: esl_zhsunyco
+  fields:
+    pattern:
+      required: false
+      default: diagnostic
+      selector:
+        select:
+          options:
+            - diagnostic
+            - solid_black
+            - solid_white
+            - solid_red
+            - solid_yellow
+            - stripes_h
+            - stripes_v
+            - checkerboard
+            - quadrants
+    encoding:
+      required: false
+      default: auto
+      selector:
+        select:
+          options: [auto, mono, bwry_packed, bwry_planes]
+    bit_order:
+      required: false
+      default: msb
+      selector:
+        select:
+          options: [msb, lsb]
+    rotate:
+      required: false
+      default: 0
+      selector:
+        select:
+          options: ["0", "90", "180", "270"]
+    mirror:
+      required: false
+      default: false
+      selector:
+        boolean:
+    invert:
+      required: false
+      default: false
+      selector:
+        boolean:
+    dither:
       required: false
       default: true
       selector:

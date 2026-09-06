@@ -17,7 +17,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up the buttons for one label."""
     device: ESLDevice = entry.runtime_data
-    async_add_entities([ESLClearScreenButton(device), ESLProbeButton(device)])
+    async_add_entities(
+        [
+            ESLClearScreenButton(device),
+            ESLTestPatternButton(device),
+            ESLProbeButton(device),
+        ]
+    )
 
 
 class ESLClearScreenButton(ESLEntity, ButtonEntity):
@@ -30,6 +36,23 @@ class ESLClearScreenButton(ESLEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Send the clear command."""
         await self.device.async_clear_screen()
+
+
+class ESLTestPatternButton(ESLEntity, ButtonEntity):
+    """Uploads the built-in diagnostic pattern so the panel can be verified."""
+
+    def __init__(self, device: ESLDevice) -> None:
+        """Initialise the button."""
+        super().__init__(device, "test_pattern")
+
+    async def async_press(self) -> None:
+        """Render and upload the diagnostic pattern."""
+        from .imaging import ImageRequest
+        from .patterns import DEFAULT_PATTERN
+
+        await self.device.async_send_image(
+            ImageRequest(pattern=DEFAULT_PATTERN, stretch=True)
+        )
 
 
 class ESLProbeButton(ESLEntity, ButtonEntity):

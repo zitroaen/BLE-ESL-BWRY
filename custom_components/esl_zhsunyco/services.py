@@ -21,11 +21,13 @@ from .const import (
     SERVICE_CLEAR_SCREEN,
     SERVICE_DEBUG_COMMAND,
     SERVICE_DEBUG_PROBE,
+    SERVICE_SEND_TEST_PATTERN,
     SERVICE_SET_IMAGE,
     SERVICE_SET_RGB,
 )
 from .device import ESLDevice
-from .imaging import ImageRequest
+from .imaging import BIT_ORDERS, ENCODINGS, ImageRequest
+from .patterns import DEFAULT_PATTERN, PATTERNS
 from .probe import async_probe_and_notify
 
 _LOGGER = logging.getLogger(__name__)
@@ -66,14 +68,27 @@ DEBUG_COMMAND_SCHEMA = _DEVICE_SELECTOR.extend(
     }
 )
 
+# Shared knobs: the pixel format is undocumented, so every plausible variant
+# has to be reachable without a new release.
+_ENCODING_FIELDS = {
+    vol.Optional("encoding", default="auto"): vol.In(ENCODINGS),
+    vol.Optional("bit_order", default="msb"): vol.In(BIT_ORDERS),
+    vol.Optional("rotate", default=0): vol.All(
+        vol.Coerce(int), vol.In([0, 90, 180, 270])
+    ),
+    vol.Optional("mirror", default=False): cv.boolean,
+    vol.Optional("invert", default=False): cv.boolean,
+    vol.Optional("dither", default=True): cv.boolean,
+}
+
 SET_IMAGE_SCHEMA = _DEVICE_SELECTOR.extend(
+    {vol.Required("path"): cv.string, **_ENCODING_FIELDS}
+)
+
+SEND_TEST_PATTERN_SCHEMA = _DEVICE_SELECTOR.extend(
     {
-        vol.Required("path"): cv.string,
-        vol.Optional("rotate", default=0): vol.All(
-            vol.Coerce(int), vol.In([0, 90, 180, 270])
-        ),
-        vol.Optional("invert", default=False): cv.boolean,
-        vol.Optional("dither", default=True): cv.boolean,
+        vol.Optional("pattern", default=DEFAULT_PATTERN): vol.In(PATTERNS),
+        **_ENCODING_FIELDS,
     }
 )
 
@@ -152,18 +167,33 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 payload, expect_response=call.data["expect_response"]
             )
 
+    def _request_from(call: ServiceCall, **source) -> ImageRequest:
+        return ImageRequest(
+            encoding=call.data["encoding"],
+            bit_order=call.data["bit_order"],
+            rotate=call.data["rotate"],
+            mirror=call.data["mirror"],
+            invert=call.data["invert"],
+            dither=call.data["dither"],
+            **source,
+        )
+
     async def _set_image(call: ServiceCall) -> None:
         path = call.data["path"]
         if not hass.config.is_allowed_path(path):
             raise ServiceValidationError(
                 f"Path {path} is not allowed, add it to allowlist_external_dirs"
             )
-        request = ImageRequest(
-            path=path,
-            rotate=call.data["rotate"],
-            invert=call.data["invert"],
-            dither=call.data["dither"],
-        )
+        request = _request_from(call, path=path)
+        for device in _resolve_devices(hass, call):
+            await device.async_send_image(request)
+
+    async def _send_test_pattern(call: ServiceCall) -> None:
+        """Send a built-in pattern, no file and no allowlist needed."""
+        request = _request_from(call, pattern=call.data["pattern"])
+        # A test pattern is drawn at panel resolution already; fitting it
+        # would letterbox and hide exactly the edges being tested.
+        request.stretch = True
         for device in _resolve_devices(hass, call):
             await device.async_send_image(request)
 
@@ -181,4 +211,10 @@ def async_setup_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN, SERVICE_DEBUG_COMMAND, _debug_command, schema=DEBUG_COMMAND_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SEND_TEST_PATTERN,
+        _send_test_pattern,
+        schema=SEND_TEST_PATTERN_SCHEMA,
     )

@@ -78,6 +78,9 @@
       },
       "debug_probe": {
         "name": "Debug probe"
+      },
+      "test_pattern": {
+        "name": "Test pattern"
       }
     },
     "light": {
@@ -134,15 +137,27 @@
         },
         "rotate": {
           "name": "Rotation",
-          "description": "Rotate the image before fitting it to the panel."
+          "description": "Rotate before fitting to the panel."
         },
         "invert": {
           "name": "Invert",
-          "description": "Invert black and white on 1 bit panels."
+          "description": "Swap black and white on 1 bit panels."
         },
         "dither": {
           "name": "Dither",
           "description": "Apply Floyd-Steinberg dithering."
+        },
+        "encoding": {
+          "name": "Encoding",
+          "description": "Pixel format to try. 'auto' follows the panel model. The vendor document does not specify this, so trying variants is expected."
+        },
+        "bit_order": {
+          "name": "Bit order",
+          "description": "Whether the first pixel sits in the most or least significant bits of a byte."
+        },
+        "mirror": {
+          "name": "Mirror",
+          "description": "Flip horizontally."
         }
       }
     },
@@ -161,6 +176,40 @@
         "expect_response": {
           "name": "Write with response",
           "description": "Whether to use an ATT write with response."
+        }
+      }
+    },
+    "send_test_pattern": {
+      "name": "Send test pattern",
+      "description": "Uploads a built-in pattern so the panel can be verified without an image file. The diagnostic pattern shows which part of the encoding is wrong.",
+      "fields": {
+        "pattern": {
+          "name": "Pattern",
+          "description": "Which built-in pattern to send."
+        },
+        "encoding": {
+          "name": "Encoding",
+          "description": "Pixel format to try. 'auto' follows the panel model. The vendor document does not specify this, so trying variants is expected."
+        },
+        "bit_order": {
+          "name": "Bit order",
+          "description": "Whether the first pixel sits in the most or least significant bits of a byte."
+        },
+        "rotate": {
+          "name": "Rotation",
+          "description": "Rotate before fitting to the panel."
+        },
+        "mirror": {
+          "name": "Mirror",
+          "description": "Flip horizontally."
+        },
+        "invert": {
+          "name": "Invert",
+          "description": "Swap black and white on 1 bit panels."
+        },
+        "dither": {
+          "name": "Dither",
+          "description": "Apply Floyd-Steinberg dithering."
         }
       }
     }

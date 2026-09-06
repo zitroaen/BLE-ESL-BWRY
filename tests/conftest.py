@@ -53,3 +53,17 @@ def load_rle():
         package.__path__ = [str(COMPONENT)]
         sys.modules["esl_pkg"] = package
     return _load("rle", COMPONENT / "rle.py", package)
+
+
+def load_imaging():
+    """Load patterns + imaging together; imaging imports patterns lazily."""
+    _stub_bleak()
+    package = sys.modules.get("esl_pkg")
+    if package is None:
+        package = types.ModuleType("esl_pkg")
+        package.__path__ = [str(COMPONENT)]
+        sys.modules["esl_pkg"] = package
+    _load("const", COMPONENT / "const.py", package)
+    patterns = _load("patterns", COMPONENT / "patterns.py", package)
+    imaging = _load("imaging", COMPONENT / "imaging.py", package)
+    return patterns, imaging

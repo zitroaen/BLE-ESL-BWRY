@@ -390,6 +390,7 @@ class ESLDevice:
         """Render and upload a full screen image (sections 3.1 - 3.2)."""
         from .imaging import render_image
 
+        # The panel decides the default; an explicit encoding wins.
         request.pixel_format = self.pixel_format
         data = await self.hass.async_add_executor_job(
             render_image, request, self.width, self.height

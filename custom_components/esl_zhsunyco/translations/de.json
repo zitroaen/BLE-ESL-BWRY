@@ -78,6 +78,9 @@
       },
       "debug_probe": {
         "name": "Diagnose-Probe"
+      },
+      "test_pattern": {
+        "name": "Testbild"
       }
     },
     "light": {
@@ -134,7 +137,7 @@
         },
         "rotate": {
           "name": "Drehung",
-          "description": "Bild vor dem Einpassen drehen."
+          "description": "Vor dem Einpassen drehen."
         },
         "invert": {
           "name": "Invertieren",
@@ -143,6 +146,18 @@
         "dither": {
           "name": "Dithering",
           "description": "Floyd-Steinberg-Dithering anwenden."
+        },
+        "encoding": {
+          "name": "Kodierung",
+          "description": "Zu testendes Pixelformat. 'auto' richtet sich nach dem Panel-Modell. Die Hersteller-Doku legt das nicht fest, Ausprobieren ist also vorgesehen."
+        },
+        "bit_order": {
+          "name": "Bit-Reihenfolge",
+          "description": "Ob das erste Pixel in den höchst- oder niederwertigen Bits eines Bytes liegt."
+        },
+        "mirror": {
+          "name": "Spiegeln",
+          "description": "Horizontal spiegeln."
         }
       }
     },
@@ -161,6 +176,40 @@
         "expect_response": {
           "name": "Mit Bestätigung schreiben",
           "description": "Ob ein ATT-Write mit Bestätigung verwendet wird."
+        }
+      }
+    },
+    "send_test_pattern": {
+      "name": "Testbild senden",
+      "description": "Überträgt ein eingebautes Muster, damit sich das Panel ohne Bilddatei prüfen lässt. Das Diagnose-Muster zeigt, welcher Teil der Kodierung falsch ist.",
+      "fields": {
+        "pattern": {
+          "name": "Muster",
+          "description": "Welches eingebaute Muster gesendet wird."
+        },
+        "encoding": {
+          "name": "Kodierung",
+          "description": "Zu testendes Pixelformat. 'auto' richtet sich nach dem Panel-Modell. Die Hersteller-Doku legt das nicht fest, Ausprobieren ist also vorgesehen."
+        },
+        "bit_order": {
+          "name": "Bit-Reihenfolge",
+          "description": "Ob das erste Pixel in den höchst- oder niederwertigen Bits eines Bytes liegt."
+        },
+        "rotate": {
+          "name": "Drehung",
+          "description": "Vor dem Einpassen drehen."
+        },
+        "mirror": {
+          "name": "Spiegeln",
+          "description": "Horizontal spiegeln."
+        },
+        "invert": {
+          "name": "Invertieren",
+          "description": "Schwarz und Weiß bei 1-Bit-Panels tauschen."
+        },
+        "dither": {
+          "name": "Dithering",
+          "description": "Floyd-Steinberg-Dithering anwenden."
         }
       }
     }

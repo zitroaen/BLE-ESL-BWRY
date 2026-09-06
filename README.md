@@ -20,6 +20,7 @@ Abschnittsnummer kommentiert.
 | RGB-LED `0xA508` | Abschn. 3.8 | ✅ |
 | Bildschirm löschen `0xA504` | Abschn. 3.7 | ✅ |
 | Bildupload `0xA500` / Refresh `0xA501` / `0xA502` | Abschn. 3.1–3.3 | ⚠️ Transport implementiert, Pixelformat experimentell |
+| Testbilder ohne Bilddatei | – | ✅ |
 | Multi-Screen `0xA503` / `0xA509` | Abschn. 3.9–3.10 | ⚠️ implementiert, ungetestet |
 | OTA `0xA505`–`0xA507` | Abschn. 3.4–3.6 | ❌ bewusst nicht implementiert |
 
@@ -170,6 +171,47 @@ Batterie-Charakteristik:  2963 mV  (Little Endian gelesen)
 `0b 93` an Offset 8 ergibt Big Endian gelesen 2963 — und das ist das
 **einzige** Zwei-Byte-Fenster im gesamten Advertisement, das diesen Wert
 liefert. Little Endian ergäbe dort 37643, also 37,6 V.
+
+## Testbild senden
+
+Weil das Pixelformat nicht dokumentiert ist, kommt beim ersten Upload
+wahrscheinlich nicht das Richtige heraus. Deshalb gibt es eingebaute
+Testmuster — keine Bilddatei, kein `allowlist_external_dirs` nötig.
+
+**Ein Klick:** der Button **Testbild** am Gerät sendet das Diagnose-Muster.
+
+**Mit Parametern:**
+
+```yaml
+action: esl_zhsunyco.send_test_pattern
+target:
+  device_id: <dein Label>
+data:
+  pattern: diagnostic     # oder solid_black, quadrants, stripes_v, ...
+  encoding: auto          # auto | mono | bwry_packed | bwry_planes
+  bit_order: msb          # msb | lsb
+  rotate: 0
+  mirror: false
+```
+
+### Das Diagnose-Muster lesen
+
+Es ist so aufgebaut, dass ein Foto des Ergebnisses verrät, **welcher**
+Parameter falsch ist:
+
+| Beobachtung | Bedeutung |
+|---|---|
+| Nichts ändert sich | Upload kommt nicht an — erst `clear_screen` prüfen |
+| Rahmen fehlt oder ist doppelt | Breite und Höhe vertauscht → `rotate: 90` |
+| Ecken-Dreieck an der falschen Stelle | Drehung oder Spiegelung → `rotate` / `mirror` |
+| Farbblöcke in falscher Farbe | Palettenreihenfolge → `BWRY_PALETTE` in `imaging.py` |
+| Feine Streifen verschmieren/versetzt | Bit-Reihenfolge → `bit_order: lsb` |
+| Bild diagonal verzogen | Zeilenlänge stimmt nicht → anderes `encoding` |
+| Nur oberes Drittel gefüllt | Falsche Bits pro Pixel → `encoding: mono` statt `bwry_packed` |
+
+Sinnvolle Reihenfolge zum Durchprobieren: erst `solid_black` (reagiert das
+Panel überhaupt?), dann `quadrants` (Orientierung und Farben), dann
+`diagnostic` für die Feinheiten.
 
 ## Fehlersuche
 

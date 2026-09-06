@@ -226,3 +226,97 @@ async def test_debug_command_sends_the_given_bytes(
         )
 
     assert sent == [(b"\xa5\x04", False)]
+
+
+async def test_test_pattern_button_uploads_panel_sized_data(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """One press must render and upload a full panel of bytes."""
+    from unittest.mock import AsyncMock, patch
+
+    from homeassistant.util import dt as dt_util
+
+    device = await _setup(hass, config_entry)
+    device.state.last_advert = dt_util.utcnow()
+    device.coordinator.async_update_listeners()
+
+    uploaded: list[bytes] = []
+
+    async def fake_send_image(client, data, *, compressed=False):
+        uploaded.append(bytes(data))
+
+    with (
+        patch(
+            "custom_components.esl_zhsunyco.device.protocol.send_image",
+            new=fake_send_image,
+        ),
+        patch(
+            "custom_components.esl_zhsunyco.device._ESLConnection.__aenter__",
+            new=AsyncMock(return_value=object()),
+        ),
+        patch(
+            "custom_components.esl_zhsunyco.device._ESLConnection.__aexit__",
+            new=AsyncMock(return_value=False),
+        ),
+    ):
+        await hass.services.async_call(
+            "button",
+            "press",
+            {"entity_id": "button.esl_66_66_54_20_00_55_test_pattern"},
+            blocking=True,
+        )
+
+    assert len(uploaded) == 1
+    # BLE-35BWRY is 184x384 and defaults to two bits per pixel.
+    assert len(uploaded[0]) == 184 * 384 // 4
+
+
+async def test_send_test_pattern_service_honours_encoding(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """The encoding knob must reach the packer, so a sweep is meaningful."""
+    from unittest.mock import AsyncMock, patch
+
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.esl_zhsunyco.const import DOMAIN, SERVICE_SEND_TEST_PATTERN
+
+    device = await _setup(hass, config_entry)
+    device.state.last_advert = dt_util.utcnow()
+    device_entry = dr.async_entries_for_config_entry(
+        dr.async_get(hass), config_entry.entry_id
+    )[0]
+
+    uploaded: list[bytes] = []
+
+    async def fake_send_image(client, data, *, compressed=False):
+        uploaded.append(bytes(data))
+
+    with (
+        patch(
+            "custom_components.esl_zhsunyco.device.protocol.send_image",
+            new=fake_send_image,
+        ),
+        patch(
+            "custom_components.esl_zhsunyco.device._ESLConnection.__aenter__",
+            new=AsyncMock(return_value=object()),
+        ),
+        patch(
+            "custom_components.esl_zhsunyco.device._ESLConnection.__aexit__",
+            new=AsyncMock(return_value=False),
+        ),
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SEND_TEST_PATTERN,
+            {
+                "device_id": device_entry.id,
+                "pattern": "solid_black",
+                "encoding": "mono",
+            },
+            blocking=True,
+        )
+
+    assert len(uploaded) == 1
+    assert len(uploaded[0]) == 184 * 384 // 8

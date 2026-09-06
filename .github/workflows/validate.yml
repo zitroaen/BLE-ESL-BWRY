@@ -48,4 +48,5 @@ jobs:
       - run: python tests/test_protocol.py
       - run: python tests/test_diagnostics.py
       - run: python tests/test_rle.py
+      - run: python tests/test_imaging.py
       - run: pytest tests/integration -q
