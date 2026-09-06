@@ -43,7 +43,9 @@ def test_battery_candidates_handle_short_input():
 
 def test_describe_advertisement_scans_every_offset():
     """The report must let a shifted layout be spotted by eye."""
-    payload = struct.pack(">HHHHH", 0xAB01, 0x0102, 0x0203, 0x0304, 2950)
+    payload = struct.pack("<HHHH", 0xAB01, 0x0102, 0x0203, 0x0304) + struct.pack(
+        ">H", 2950
+    )
     report = protocol.describe_advertisement(payload)
 
     assert report["length"] == 10
@@ -205,24 +207,58 @@ def test_probe_reports_unknown_family():
     assert report["protocol_family"]["detected"] == const.PROTOCOL_UNKNOWN
 
 
-REAL_ADVERT = bytes.fromhex("300000 0e0330 02010b93".replace(" ", ""))
-REAL_BATTERY_CHARACTERISTIC_MV = 2963
+# Captured together in one successful probe, so all three can be cross checked.
+REAL_ADVERT = bytes.fromhex("30000 00e033002010b99".replace(" ", ""))
+REAL_VERSION_CHARACTERISTIC = bytes.fromhex("3000000e03300201")
+REAL_BATTERY_CHARACTERISTIC = bytes.fromhex("990b")
+REAL_BATTERY_CHARACTERISTIC_MV = 2969
 
 
 def test_real_advertisement_matches_battery_characteristic():
-    """Captured hardware data: the advertisement must agree with the poll.
-
-    Advertisement 30 00 00 0e 03 30 02 01 0b 93 was seen while the battery
-    characteristic reported 2963 mV. Big endian at offset 8 is the only two
-    byte window in the payload that produces that number.
-    """
-    assert REAL_ADVERT.hex(" ") == "30 00 00 0e 03 30 02 01 0b 93"
+    """The advertisement battery must agree with the characteristic."""
+    assert REAL_ADVERT.hex(" ") == "30 00 00 0e 03 30 02 01 0b 99"
 
     parsed = protocol.parse_advertisement(REAL_ADVERT)
     assert parsed is not None
     _version, battery_mv = parsed
     assert battery_mv == REAL_BATTERY_CHARACTERISTIC_MV
-    assert round(battery_mv / 1000, 3) == 2.963
+    assert round(battery_mv / 1000, 3) == 2.969
+
+
+def test_advertisement_and_version_characteristic_agree():
+    """The same bytes must never decode to two different versions.
+
+    The first eight advertisement bytes are byte identical to the version
+    characteristic, so parsing them differently is a bug by construction.
+    """
+    assert REAL_ADVERT[:8] == REAL_VERSION_CHARACTERISTIC
+
+    class _Client:
+        async def read_gatt_char(self, uuid):
+            return REAL_VERSION_CHARACTERISTIC
+
+    import asyncio
+
+    from_characteristic = asyncio.run(protocol.read_version(_Client()))
+    from_advertisement, _battery = protocol.parse_advertisement(REAL_ADVERT)
+
+    assert from_advertisement == from_characteristic
+
+
+def test_advertisement_battery_is_the_reverse_of_the_characteristic():
+    """Only the battery field differs in byte order, and it is a reversal."""
+    assert REAL_ADVERT[8:10] == REAL_BATTERY_CHARACTERISTIC[::-1]
+
+    class _Client:
+        async def read_gatt_char(self, uuid):
+            return REAL_BATTERY_CHARACTERISTIC
+
+    import asyncio
+
+    assert (
+        asyncio.run(protocol.read_battery_mv(_Client()))
+        == REAL_BATTERY_CHARACTERISTIC_MV
+    )
 
 
 def test_no_little_endian_window_yields_the_true_battery():
@@ -245,7 +281,9 @@ def test_real_advertisement_report_is_labelled():
     """The report must say which byte order was used and why."""
     report = protocol.describe_advertisement(REAL_ADVERT)
     assert report["parsed"]["battery_mv"] == REAL_BATTERY_CHARACTERISTIC_MV
+    assert "little endian" in report["parsed"]["byte_order"]
     assert "big endian" in report["parsed"]["byte_order"]
+    assert report["parsed"]["version_bytes"] == "30 00 00 0e 03 30 02 01"
 
 
 if __name__ == "__main__":

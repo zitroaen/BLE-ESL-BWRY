@@ -181,7 +181,8 @@ async def test_failed_probe_still_reports_the_battery(
         SimpleNamespace(
             rssi=-38,
             manufacturer_data={
-                0xBBAA: struct.pack(">HHHHH", 0x0030, 0x000E, 0x0330, 0x0201, 2978)
+                0xBBAA: struct.pack("<HHHH", 0x0030, 0x000E, 0x0330, 0x0201)
+                + struct.pack(">H", 2978)
             },
         ),
         None,

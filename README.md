@@ -159,18 +159,68 @@ gebündelt, damit sie leicht korrigierbar sind:
 
 ## Bestätigt gegen echte Hardware
 
-**Das Advertisement ist Big Endian, die Charakteristiken sind Little
-Endian.** Die Doku sagt zu beidem nichts. Nachgewiesen an einem Gerät, das
-gleichzeitig meldete:
+Ein vollständiger Probe-Lauf an einem BLE-35BWRY hat folgendes belegt.
+
+### GATT-Tabelle
+
+Alle fünf Charakteristiken liegen unter dem Service
+`30323032-4C53-4545-4C42-4B4E494C4F57`:
+
+| Charakteristik | UUID-Präfix | Handle | Properties |
+|---|---|---|---|
+| Batterie | `35323032` | 14 | notify, read |
+| Status | `34323032` | 17 | notify, read |
+| Security | `33323032` | 20 | read, **write** |
+| Command | `31323032` | 23 | read, **write** |
+| Version | `32323032` | 26 | notify, read |
+
+**Die Command-Charakteristik unterstützt nur „Write with Response"** — kein
+Write-without-Response. Der Schreibmodus `auto` wählt damit automatisch das
+Richtige; die Option bleibt nur für abweichende Firmware-Stände erhalten.
+
+Alle drei Lese-Charakteristiken können außerdem **notify** — die Doku
+erwähnt das nicht. Bisher ungenutzt, aber der naheliegende Kanal für eine
+Rückmeldung nach dem Bildupload.
+
+MTU: **247 Bytes**, also 238 Byte Nutzdaten pro Chunk.
+
+### Unlock
+
+Challenge/Response ist bitgenau verifiziert:
 
 ```
-Advertisement:            30 00 00 0e 03 30 02 01 0b 93
-Batterie-Charakteristik:  2963 mV  (Little Endian gelesen)
+Challenge : d8 2f 70 03 5f a0 99 07 36 fd e2 1c 4d a5 9b bf
+Antwort   : e0 87 76 67 af a5 3a 8b 00 6e 24 71 0f 58 fc 57
 ```
 
-`0b 93` an Offset 8 ergibt Big Endian gelesen 2963 — und das ist das
-**einzige** Zwei-Byte-Fenster im gesamten Advertisement, das diesen Wert
-liefert. Little Endian ergäbe dort 37643, also 37,6 V.
+Danach meldet die Status-Charakteristik Fehlercode 0 (`no_error`).
+Die Status-Charakteristik liefert übrigens 32 Bytes statt der
+dokumentierten 2 — der Rest ist Null und wird ignoriert.
+
+### Gemischte Byte-Reihenfolge
+
+Ein Probe hat alle drei Quellen gleichzeitig erfasst:
+
+```
+Advertisement           : 30 00 00 0e 03 30 02 01 0b 99
+Version-Charakteristik  : 30 00 00 0e 03 30 02 01
+Batterie-Charakteristik : 99 0b   -> Little Endian = 2969 mV
+```
+
+Daraus folgt eindeutig:
+
+- Die ersten acht Advertisement-Bytes sind **byte-identisch** mit der
+  Version-Charakteristik. Die Versionsfelder müssen also in beiden Quellen
+  **gleich** dekodiert werden (Little Endian).
+- Die letzten beiden sind die **Byte-Umkehr** der Batterie-Charakteristik.
+  Nur dieses eine Feld ist im Advertisement Big Endian.
+
+Das komplette Advertisement einheitlich zu lesen ist in beiden Richtungen
+falsch. Die Doku erwähnt zu Byte-Reihenfolgen nichts.
+
+Die Bedeutung der Versionsfelder selbst bleibt offen: `03 30` lässt sich als
+`3.48`, `48.3` oder `3.30` lesen. Die Rohbytes stehen deshalb als
+`version_bytes` in der Diagnose.
 
 ## Testbild senden
 

@@ -192,7 +192,9 @@ def test_read_status_busy_and_error():
 
 def test_parse_advertisement():
     """Manufacturer data after the company id: PID, versions, battery."""
-    payload = struct.pack(">HHHHH", 0xAB01, 0x0100, 0x0200, 0x0300, 2950)
+    payload = struct.pack("<HHHH", 0xAB01, 0x0100, 0x0200, 0x0300) + struct.pack(
+        ">H", 2950
+    )
     parsed = protocol.parse_advertisement(payload)
     assert parsed is not None
     version, battery_mv = parsed

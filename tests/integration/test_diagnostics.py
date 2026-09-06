@@ -130,7 +130,9 @@ async def test_probe_includes_advertisement_without_connection(
     """Advertisement data stays useful even when connecting fails."""
     device = await _setup(hass, config_entry)
 
-    payload = struct.pack(">HHHHH", 0xAB01, 0x0102, 0x0203, 0x0304, 29200)
+    payload = struct.pack("<HHHH", 0xAB01, 0x0102, 0x0203, 0x0304) + struct.pack(
+        ">H", 29200
+    )
     device._advert_received(
         SimpleNamespace(rssi=-55, manufacturer_data={MANUFACTURER_ID: payload}), None
     )

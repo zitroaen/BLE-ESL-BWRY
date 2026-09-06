@@ -18,7 +18,9 @@ RGB_LIGHT = "light.esl_66_66_54_20_00_55_rgb_led"
 
 def _advert(company_id: int, battery_mv: int = 2950, rssi: int = -60):
     """Build a fake service info carrying our manufacturer payload."""
-    payload = struct.pack(">HHHHH", 0xAB01, 0x0102, 0x0203, 0x0304, battery_mv)
+    payload = struct.pack("<HHHH", 0xAB01, 0x0102, 0x0203, 0x0304) + struct.pack(
+        ">H", battery_mv
+    )
     return SimpleNamespace(rssi=rssi, manufacturer_data={company_id: payload})
 
 

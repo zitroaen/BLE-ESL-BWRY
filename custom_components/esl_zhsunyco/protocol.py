@@ -265,22 +265,25 @@ def parse_advertisement(payload: bytes) -> tuple[VersionInfo, int] | None:
 
         PID 2B | AppVer 2B | HwVer 2B | DispVer 2B | BatVoltage_mv 2B
 
-    The fields are BIG endian, unlike the battery characteristic which is
-    little endian. The document states neither. This was established against
-    hardware: an advertisement of
+    The byte order is MIXED, which the document does not mention. A full
+    probe captured all three sources at once::
 
-        30 00 00 0e 03 30 02 01 0b 93
+        advertisement:           30 00 00 0e 03 30 02 01 0b 99
+        version characteristic:  30 00 00 0e 03 30 02 01
+        battery characteristic:  99 0b            (little endian, 2969 mV)
 
-    was captured while the battery characteristic read 2963 mV. Offset 8
-    read big endian is the only two byte window in the whole payload that
-    yields 2963; little endian there gives 37643, which is what produced the
-    nonsensical 37.6 V reading.
+    The first eight bytes are byte identical to the version characteristic,
+    so the version fields must be decoded the same way in both: little
+    endian. The last two are the byte reverse of the battery
+    characteristic, so the battery alone is big endian here. Decoding the
+    whole payload one way or the other is wrong either way.
 
     Returns ``None`` when the payload is too short to be one of ours.
     """
     if len(payload) < ADV_PAYLOAD_LEN:
         return None
-    pid, app, hw, disp, battery_mv = struct.unpack_from(">HHHHH", payload, 0)
+    pid, app, hw, disp = struct.unpack_from("<HHHH", payload, 0)
+    (battery_mv,) = struct.unpack_from(">H", payload, 8)
     return VersionInfo(pid=pid, app_version=app, hw_version=hw, disp_version=disp), int(
         battery_mv
     )
@@ -331,9 +334,15 @@ def describe_advertisement(payload: bytes) -> dict[str, object]:
     }
 
     if len(payload) >= ADV_PAYLOAD_LEN:
-        pid, app, hw, disp, battery = struct.unpack_from(">HHHHH", payload, 0)
+        pid, app, hw, disp = struct.unpack_from("<HHHH", payload, 0)
+        (battery,) = struct.unpack_from(">H", payload, 8)
         fields["parsed"] = {
-            "byte_order": "big endian (verified against the battery characteristic)",
+            "byte_order": (
+                "version fields little endian (byte identical to the version "
+                "characteristic), battery big endian (byte reverse of the "
+                "battery characteristic)"
+            ),
+            "version_bytes": payload[:8].hex(" "),
             "pid": f"0x{pid:04X}",
             "app_version": format_version(app),
             "hw_version": format_version(hw),
