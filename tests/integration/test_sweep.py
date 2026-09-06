@@ -218,3 +218,159 @@ async def test_tolerated_but_ignored_is_reported_separately(
 
     assert report["tolerated_but_ignored"] == ["a5 04"]
     assert "no candidate made the panel react" in report["conclusion"]
+
+
+async def test_command_sweep_service_runs(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """The service must reach the device and report, without blocking on it.
+
+    A sweep can run for many minutes. Awaiting it inside the service call
+    left the caller holding an open call for the whole time; the frontend
+    gave up first and showed an error with no text at all - "undefined".
+    So the call returns at once and the work continues in the background.
+    """
+    import contextlib
+
+    from homeassistant.components import persistent_notification
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.esl_zhsunyco.const import DOMAIN, SERVICE_COMMAND_SWEEP
+
+    device = await _setup(hass, config_entry)
+    device_entry = dr.async_entries_for_config_entry(
+        dr.async_get(hass), config_entry.entry_id
+    )[0]
+    client = FakeClient(reacts_to=b"\xa5\x09\xfe\xfe")
+
+    with contextlib.ExitStack() as stack:
+        for ctx in _connection(client):
+            stack.enter_context(ctx)
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_COMMAND_SWEEP,
+            {"device_id": device_entry.id, "settle": 0.1},
+            blocking=True,
+        )
+        # The call is back before the sweep is; that is the point.
+        assert device.state.last_command is None
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert device.state.last_command is not None
+    assert device.state.last_command["working_payload"] == "a5 09 fe fe"
+
+    notifications = persistent_notification._async_get_or_create_notifications(hass)
+    body = notifications[f"{DOMAIN}_sweep_{device.address}"]["message"]
+    assert "a5 09 fe fe" in body
+
+
+async def test_command_sweep_failure_is_reported_with_text(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """A sweep that blows up must say what happened.
+
+    Several BLE timeouts stringify to the empty string. Surfacing one of
+    those verbatim is how the user ended up staring at "undefined", so the
+    notification always carries the exception type as well.
+    """
+    from homeassistant.components import persistent_notification
+    from homeassistant.helpers import device_registry as dr
+
+    from custom_components.esl_zhsunyco.const import DOMAIN, SERVICE_COMMAND_SWEEP
+
+    device = await _setup(hass, config_entry)
+    device_entry = dr.async_entries_for_config_entry(
+        dr.async_get(hass), config_entry.entry_id
+    )[0]
+
+    with patch.object(
+        type(device), "async_command_sweep", side_effect=TimeoutError()
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_COMMAND_SWEEP,
+            {"device_id": device_entry.id},
+            blocking=True,
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    notifications = persistent_notification._async_get_or_create_notifications(hass)
+    body = notifications[f"{DOMAIN}_sweep_{device.address}"]["message"]
+    assert "TimeoutError" in body
+    assert "undefined" not in body
+
+
+async def test_tolerated_candidate_keeps_the_connection(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """Only a rejection is worth another wake-up.
+
+    Reconnecting per candidate is what made a full sweep take twenty
+    minutes: waiting for a sleeping label to advertise costs up to three
+    minutes each time. A candidate the label merely ignores leaves the link
+    unlocked and usable, so it is kept.
+    """
+    import contextlib
+
+    device = await _setup(hass, config_entry)
+    client = FakeClient(drops_on=b"\x04\xa5")
+    disconnects = 0
+    real_disconnect = device._async_disconnect
+
+    async def counting_disconnect():
+        nonlocal disconnects
+        disconnects += 1
+        device._client = None
+        await real_disconnect()
+
+    device._async_disconnect = counting_disconnect
+
+    async def enter(_self):
+        client.reconnect()
+        # Mirror what the real connection does, so device.connected is true.
+        device._client = client
+        return client
+
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(
+            patch(
+                "custom_components.esl_zhsunyco.device._ESLConnection.__aenter__",
+                new=enter,
+            )
+        )
+        stack.enter_context(
+            patch(
+                "custom_components.esl_zhsunyco.device._ESLConnection.__aexit__",
+                new=AsyncMock(return_value=False),
+            )
+        )
+        stack.enter_context(
+            patch("custom_components.esl_zhsunyco.device.STATUS_POLL_S", 0)
+        )
+        stack.enter_context(
+            patch("custom_components.esl_zhsunyco.device.STATUS_WATCH_S", 0.01)
+        )
+        report = await device.async_command_sweep(
+            [b"\xa5\x04", b"\xa5\x04\x00", b"\x04\xa5", b"\xa5\x09"], settle=0
+        )
+
+    # Four candidates, but only the rejection is worth dropping the link for.
+    assert disconnects == 1
+    fresh = [item["fresh_connection"] for item in report["results"]]
+    assert fresh == [True, False, False, True]
+
+
+async def test_documented_candidates_come_before_the_speculative_ones(
+) -> None:
+    """Ordering is what keeps the sweep short.
+
+    04 a5 is known on hardware to revoke authorisation, and every rejection
+    costs a reconnect, so the forms the document actually writes go first.
+    """
+    from custom_components.esl_zhsunyco.protocol import clear_screen_candidates
+
+    candidates = clear_screen_candidates()
+    assert candidates[0] == b"\xa5\x04"
+    assert candidates[1] == b"\xa5\x09\xfe\xfe"
+    assert candidates[-2] == b"\x04\xa5"
+    assert len(set(candidates)) == len(candidates)

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Awaitable, Callable
+from functools import partial
 
 import voluptuous as vol
 from homeassistant.components import persistent_notification
@@ -120,6 +122,62 @@ SEND_TEST_PATTERN_SCHEMA = _DEVICE_SELECTOR.extend(
 )
 
 
+def _notify(
+    hass: HomeAssistant, *, title: str, notification_id: str, body: str
+) -> None:
+    """Post a persistent notification, the only channel a sweep can report on."""
+    persistent_notification.async_create(
+        hass, body, title=title, notification_id=notification_id
+    )
+
+
+def _run_detached(
+    hass: HomeAssistant,
+    device: ESLDevice,
+    *,
+    label: str,
+    notification_id: str,
+    factory: Callable[[], Awaitable[dict]],
+) -> None:
+    """Run a sweep in the background and report through notifications.
+
+    A sweep wakes the label once per candidate and a sleeping label can take
+    three minutes to advertise, so a full sweep runs for many minutes. Awaiting
+    that inside the service call means the caller - the frontend, a script,
+    an automation - sits on an open call for the whole time and gives up long
+    before the label does; the error it then shows has no text at all, which
+    is where the bare "undefined" came from. The work itself was fine, nobody
+    was left to receive it.
+    """
+    title = f"ESL {label} {device.address}"
+    _notify(
+        hass,
+        title=title,
+        notification_id=notification_id,
+        body=(
+            "Running. Waking a sleeping label can take three minutes per "
+            "reconnect, so this may run for a while. The result replaces "
+            "this notification."
+        ),
+    )
+
+    async def _runner() -> None:
+        try:
+            report = await factory()
+        except Exception as err:  # noqa: BLE001 - the report IS the result
+            # Never let this surface as an empty message: some BLE timeouts
+            # stringify to "" and the frontend renders that as "undefined".
+            _LOGGER.exception("ESL %s on %s failed", label, device.address)
+            body = f"Failed: {type(err).__name__}: {err or 'no detail'}"
+        else:
+            body = "```json\n" + json.dumps(report, indent=2, default=str) + "\n```"
+        _notify(hass, title=title, notification_id=notification_id, body=body)
+
+    hass.async_create_background_task(
+        _runner(), f"{DOMAIN} {label} {device.address}", eager_start=False
+    )
+
+
 def _resolve_devices(hass: HomeAssistant, call: ServiceCall) -> list[ESLDevice]:
     """Map the service target onto our device objects."""
     registry = dr.async_get(hass)
@@ -215,15 +273,16 @@ def async_setup_services(hass: HomeAssistant) -> None:
             raise ServiceValidationError(f"probe_command must be hex: {err}") from err
 
         for device in _resolve_devices(hass, call):
-            report = await device.async_unlock_sweep(
-                probe_command=probe or None, settle=call.data["settle"]
-            )
-            pretty = json.dumps(report, indent=2, default=str)
-            persistent_notification.async_create(
+            _run_detached(
                 hass,
-                "```json\n" + pretty + "\n```",
-                title=f"ESL unlock sweep {device.address}",
+                device,
+                label="unlock sweep",
                 notification_id=f"{DOMAIN}_unlock_{device.address}",
+                factory=partial(
+                    device.async_unlock_sweep,
+                    probe_command=probe or None,
+                    settle=call.data["settle"],
+                ),
             )
 
     async def _command_sweep(call: ServiceCall) -> None:
@@ -252,15 +311,14 @@ def async_setup_services(hass: HomeAssistant) -> None:
             raise ServiceValidationError("nothing to send")
 
         for device in _resolve_devices(hass, call):
-            report = await device.async_command_sweep(
-                payloads, settle=call.data["settle"]
-            )
-            pretty = json.dumps(report, indent=2, default=str)
-            persistent_notification.async_create(
+            _run_detached(
                 hass,
-                "```json\n" + pretty + "\n```",
-                title=f"ESL command sweep {device.address}",
+                device,
+                label="command sweep",
                 notification_id=f"{DOMAIN}_sweep_{device.address}",
+                factory=partial(
+                    device.async_command_sweep, payloads, settle=call.data["settle"]
+                ),
             )
 
     async def _set_image(call: ServiceCall) -> None:

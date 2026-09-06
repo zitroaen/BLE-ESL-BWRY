@@ -3,4 +3,10 @@ pytest-homeassistant-custom-component
 bleak-retry-connector
 pillow
 pytest-timeout
+# Home Assistant's bluetooth component depends on usb, which imports these at
+# setup time. Without them every test that starts hass fails in setup rather
+# than in our own code.
 aiousbwatcher
+pyserial
+pyudev
+tzdata

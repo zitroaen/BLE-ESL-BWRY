@@ -334,16 +334,21 @@ def clear_screen_candidates() -> list[bytes]:
     clear, so 3.10 with -2 in both planes is at least as likely to be the
     path the firmware actually implements. Signed -2 and -1 are 0xFE and
     0xFF on the wire.
+
+    Order matters. A candidate the label rejects revokes authorisation and
+    costs a reconnect, so the forms the document actually writes come first
+    and the speculative byte swaps come last. On hardware 0x04A5 is exactly
+    such a rejection, which is why it now sits at the end.
     """
     return [
         bytes((0xA5, 0x04)),  # 3.7 as written
-        bytes((0x04, 0xA5)),  # 3.7, little endian opcode
         bytes((0xA5, 0x09, 0xFE, 0xFE)),  # 3.10, clear both planes
         bytes((0xA5, 0x09, 0xFE, 0xFF)),  # 3.10, clear A, leave B
         bytes((0xA5, 0x09, 0xFF, 0xFE)),  # 3.10, leave A, clear B
-        bytes((0x09, 0xA5, 0xFE, 0xFE)),  # 3.10, little endian opcode
         bytes((0xA5, 0x04, 0x00)),  # 3.7 with a zero length byte
         bytes((0xA5, 0x04, 0x00, 0x00)),  # 3.7 with a zero length word
+        bytes((0x04, 0xA5)),  # 3.7, little endian opcode - known rejected
+        bytes((0x09, 0xA5, 0xFE, 0xFE)),  # 3.10, little endian opcode
     ]
 
 

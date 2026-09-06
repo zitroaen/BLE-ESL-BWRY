@@ -219,7 +219,7 @@
     },
     "debug_command_sweep": {
       "name": "Kommando-Varianten testen",
-      "description": "Sendet mehrere Kodierungen eines Kommandos in einer einzigen Verbindung und meldet, wie die Status-Charakteristik jeweils reagiert hat. Das Aufwecken des Labels ist der langsame Teil, deshalb werden alle Kandidaten auf einmal getestet.",
+      "description": "Sendet mehrere Kodierungen eines Kommandos in einer einzigen Verbindung und meldet, wie die Status-Charakteristik jeweils reagiert hat. Läuft im Hintergrund und meldet sich über eine persistente Benachrichtigung; der Aufruf selbst kehrt sofort zurück, denn das Aufwecken des Labels dauert. Die Verbindung wird nur nach einem abgelehnten Kandidaten getrennt.",
       "fields": {
         "opcode": {
           "name": "Opcode",

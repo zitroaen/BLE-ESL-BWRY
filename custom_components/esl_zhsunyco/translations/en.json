@@ -219,7 +219,7 @@
     },
     "debug_command_sweep": {
       "name": "Debug command sweep",
-      "description": "Sends several encodings of one command in a single connection and reports how the status characteristic reacted to each. Waking the label is the slow part, so this tests every candidate in one go.",
+      "description": "Sends several encodings of one command in a single connection and reports how the status characteristic reacted to each. Runs in the background and reports through a persistent notification: waking the label is the slow part, so the service call returns straight away. The link is only dropped after a candidate the label rejects.",
       "fields": {
         "opcode": {
           "name": "Opcode",

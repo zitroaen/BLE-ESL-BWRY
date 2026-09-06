@@ -885,12 +885,13 @@ class ESLDevice:
     ) -> dict[str, Any]:
         """Send each command encoding on its own connection and watch status.
 
-        One connection per candidate, for the same reason the unlock sweep
-        needs it: a rejected command makes the label revoke authorisation.
-        Measured on hardware, writing 04 a5 was followed by the label
-        answering the next plain READ with ATT error 0x08, insufficient
-        authorization. Everything tried after that in the same connection
-        would be meaningless.
+        A rejected command makes the label revoke authorisation: measured on
+        hardware, writing 04 a5 was followed by the label answering the next
+        plain READ with ATT error 0x08, insufficient authorization, so
+        everything tried after that on the same link would be meaningless.
+        A candidate the label merely ignores does no such damage, so the
+        connection is only dropped after a rejection or a lost link. Each
+        entry records whether it ran on a fresh connection.
         """
         if response is None:
             response = self.write_response
@@ -899,14 +900,17 @@ class ESLDevice:
         report: dict[str, Any] = {
             "address": self.address,
             "note": (
-                "one connection per candidate: a rejected command revokes the "
-                "unlock, so later candidates on the same link prove nothing"
+                "the link is dropped after a rejected candidate, because a "
+                "rejection revokes the unlock and everything tried after it "
+                "on the same link would prove nothing; a candidate the label "
+                "merely ignores keeps the link, see fresh_connection"
             ),
             "results": results,
         }
 
         for payload in payloads:
             entry: dict[str, Any] = {"payload": payload.hex(" ")}
+            entry["fresh_connection"] = not self.connected
             try:
                 async with self.connection() as client:
                     entry["unlock_verified"] = self.state.unlock_verified
@@ -931,9 +935,13 @@ class ESLDevice:
             if entry.get("label_reacted"):
                 break
 
-            # A rejected command leaves the label unwilling to talk; start the
-            # next candidate from a clean connection.
-            await self._async_disconnect()
+            # Only a rejection needs a fresh link. A candidate the label
+            # merely ignored leaves the connection unlocked and usable, and
+            # reconnecting costs another wake-up - up to three minutes each,
+            # which is what turned this sweep into a twenty minute service
+            # call. Keep the link when it is still good.
+            if entry["rejected"] or not self.connected:
+                await self._async_disconnect()
 
         winner = next(
             (item["payload"] for item in results if item.get("label_reacted")), None

@@ -49,8 +49,13 @@ def no_connect_settle():
 
 
 @pytest.fixture
-def mock_bluetooth():
-    """Stub out the Bluetooth stack so no adapter is required."""
+def mock_bluetooth(mock_bleak_scanner_start, mock_bluetooth_adapters):
+    """Stub out the Bluetooth stack so no adapter is required.
+
+    The two requested fixtures come from pytest-homeassistant-custom-component
+    and keep the bluetooth component itself from touching D-Bus during setup;
+    the patches below then replace the calls our own code makes.
+    """
     with (
         patch(
             "custom_components.esl_zhsunyco.device.bluetooth.async_register_callback",
