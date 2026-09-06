@@ -159,37 +159,6 @@ def test_send_image_compressed_uses_a502():
 
 # --- section 3.9 / 3.10: multi screen ------------------------------------
 
-
-def test_multi_store_header_and_terminator():
-    r"""Slot uploads are prefixed with PIC0x\0 and closed by a length write."""
-    client = FakeClient(mtu=200)
-    run(protocol.store_multi_image(client, 3, b"\xaa" * 20))
-
-    first = client.writes[0][1]
-    assert first[:2] == b"\x03\xa5"
-    assert struct.unpack_from("<I", first, 2)[0] == 0
-    assert first[6:12] == b"PIC03\x00"
-
-    last = client.writes[-1][1]
-    assert last[:2] == b"\x03\xa5"
-    assert struct.unpack("<I", last[2:]) == (26,)  # 6 byte header + 20 byte data
-
-
-def test_multi_refresh_signed_indices():
-    """-2 clears, -1 leaves untouched; both must survive as signed bytes."""
-    client = FakeClient()
-    run(
-        protocol.refresh_multi(
-            client, const.MULTI_INDEX_CLEAR, const.MULTI_INDEX_NO_REFRESH
-        )
-    )
-    payload = client.writes[0][1]
-    assert payload == b"\x09\xa5\xfe\xff"
-
-
-# --- sections IV, V, VI: read characteristics ----------------------------
-
-
 def test_read_version():
     """PID, AppVer, HwVer, DispVer are four little endian words."""
     raw = struct.pack("<HHHH", 0x1234, 0x0102, 0x0203, 0x0304)
@@ -238,11 +207,14 @@ def test_parse_advertisement_ignores_short_payload():
 
 def test_pack_sizes():
     """Mono packs 8 pixels per byte, BWRY packs 4."""
-    from PIL import Image
-
-    image = Image.new("RGB", (16, 4), (255, 255, 255))
-    assert len(imaging._pack_mono(image, invert=False)) == 16 // 8 * 4
-    assert len(imaging._pack_bwry(image, dither=False)) == 16 // 4 * 4
+    mono = imaging.render_image(
+        imaging.ImageRequest(pattern="solid_white", pixel_format="mono"), 16, 4
+    )
+    bwry = imaging.render_image(
+        imaging.ImageRequest(pattern="solid_white", pixel_format="bwry"), 16, 4
+    )
+    assert len(mono.payload) == 16 // 8 * 4
+    assert len(bwry.payload) == 16 // 4 * 4
 
 
 def test_render_fits_panel():

@@ -61,69 +61,11 @@ def _render(**kwargs) -> bytes:
     return imaging.render_image(request, WIDTH, HEIGHT).payload
 
 
-def test_encoding_byte_counts():
-    """Each encoding must produce exactly the bytes the panel needs."""
-    assert len(_render(encoding="mono")) == PIXELS // 8
-    assert len(_render(encoding="bwry_packed")) == PIXELS // 4
-    # Two 1 bit planes carry the same information as 2 bits per pixel.
-    assert len(_render(encoding="bwry_planes")) == 2 * (PIXELS // 8)
-
-
-def test_bit_order_actually_changes_the_bytes():
-    """The knob has to do something, otherwise sweeping it proves nothing."""
-    for encoding in ("mono", "bwry_packed", "bwry_planes"):
-        msb = _render(encoding=encoding, bit_order="msb")
-        lsb = _render(encoding=encoding, bit_order="lsb")
-        assert len(msb) == len(lsb), encoding
-        assert msb != lsb, f"{encoding}: bit_order had no effect"
-
-
-def test_mono_bit_order_is_a_per_byte_reversal():
-    """MSB and LSB packing must differ exactly by reversing bits in a byte."""
-    solid = imaging.ImageRequest(pattern="stripes_v", stretch=True, encoding="mono")
-    solid.bit_order = "msb"
-    msb = imaging.render_image(solid, 16, 2).payload
-    solid.bit_order = "lsb"
-    lsb = imaging.render_image(solid, 16, 2).payload
-
-    def reverse(byte: int) -> int:
-        return int(f"{byte:08b}"[::-1], 2)
-
-    assert bytes(reverse(b) for b in msb) == lsb
-
-
-def test_planes_are_the_two_bitplanes_of_the_packed_form():
-    """bwry_planes must carry the same pixels, only laid out differently."""
-    packed = _render(encoding="bwry_packed", bit_order="msb")
-    planes = _render(encoding="bwry_planes", bit_order="msb")
-    assert len(packed) == len(planes)
-
-    half = len(planes) // 2
-    high_plane, low_plane = planes[:half], planes[half:]
-
-    # Rebuild the codes from the packed form and from the planes, compare.
-    def codes_from_packed(data: bytes) -> list[int]:
-        out = []
-        for byte in data:
-            for shift in (6, 4, 2, 0):
-                out.append((byte >> shift) & 0x03)
-        return out
-
-    def codes_from_planes(high: bytes, low: bytes) -> list[int]:
-        out = []
-        for hi, lo in zip(high, low, strict=True):
-            for shift in (7, 6, 5, 4, 3, 2, 1, 0):
-                out.append((((hi >> shift) & 1) << 1) | ((lo >> shift) & 1))
-        return out
-
-    # Rows are byte aligned in both forms for this width, so they line up.
-    assert codes_from_packed(packed) == codes_from_planes(high_plane, low_plane)
-
 
 def test_solid_black_packs_to_a_constant():
     """The simplest possible check that the packer is not scrambling."""
     request = imaging.ImageRequest(
-        pattern="solid_black", stretch=True, encoding="bwry_packed", dither=False
+        pattern="solid_black", stretch=True, pixel_format="bwry", dither=False
     )
     data = imaging.render_image(request, WIDTH, HEIGHT).payload
     assert len(set(data)) == 1, "a solid image must pack to one repeated byte"

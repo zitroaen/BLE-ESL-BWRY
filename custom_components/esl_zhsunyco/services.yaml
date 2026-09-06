@@ -57,22 +57,15 @@ set_image:
           filter:
             - integration: esl_zhsunyco
     path:
-      required: true
+      required: false
       example: /config/www/label.png
       selector:
         text:
-    encoding:
+    url:
       required: false
-      default: auto
+      example: https://example.com/label.png
       selector:
-        select:
-          options: [auto, mono, bwry_packed, bwry_planes]
-    bit_order:
-      required: false
-      default: msb
-      selector:
-        select:
-          options: [msb, lsb]
+        text:
     rotate:
       required: false
       default: 0
@@ -146,18 +139,6 @@ send_test_pattern:
             - stripes_v
             - checkerboard
             - quadrants
-    encoding:
-      required: false
-      default: auto
-      selector:
-        select:
-          options: [auto, mono, bwry_packed, bwry_planes]
-    bit_order:
-      required: false
-      default: msb
-      selector:
-        select:
-          options: [msb, lsb]
     rotate:
       required: false
       default: 0
@@ -179,38 +160,3 @@ send_test_pattern:
       default: true
       selector:
         boolean:
-
-debug_command_sweep:
-  fields:
-    device_id:
-      required: true
-      selector:
-        device:
-          filter:
-            - integration: esl_zhsunyco
-    preset:
-      required: false
-      default: clear_screen
-      selector:
-        select:
-          options: [clear_screen, opcode]
-    opcode:
-      required: false
-      default: "A504"
-      example: "A504"
-      selector:
-        text:
-    payloads:
-      required: false
-      example: '["a5 04", "04 a5"]'
-      selector:
-        object:
-    settle:
-      required: false
-      default: 1.5
-      selector:
-        number:
-          min: 0.1
-          max: 10
-          step: 0.1
-          unit_of_measurement: s

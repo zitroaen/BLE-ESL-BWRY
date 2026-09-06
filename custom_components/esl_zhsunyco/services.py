@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import logging
-from collections.abc import Awaitable, Callable
-from functools import partial
 
+import aiohttp
 import voluptuous as vol
-from homeassistant.components import persistent_notification
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -19,6 +16,7 @@ from homeassistant.core import (
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     DOMAIN,
@@ -29,7 +27,6 @@ from .const import (
     RGB_WORK_MS_MAX,
     RGB_WORK_MS_MIN,
     SERVICE_CLEAR_SCREEN,
-    SERVICE_COMMAND_SWEEP,
     SERVICE_DEBUG_COMMAND,
     SERVICE_DEBUG_PROBE,
     SERVICE_SEND_TEST_PATTERN,
@@ -37,10 +34,9 @@ from .const import (
     SERVICE_SET_RGB,
 )
 from .device import ESLDevice
-from .imaging import BIT_ORDERS, ENCODINGS, ImageRequest
+from .imaging import ImageRequest
 from .patterns import DEFAULT_PATTERN, PATTERNS
 from .probe import async_probe_and_notify
-from .protocol import clear_screen_candidates, command_variants
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -73,19 +69,6 @@ SET_RGB_SCHEMA = _DEVICE_SELECTOR.extend(
 CLEAR_SCREEN_SCHEMA = _DEVICE_SELECTOR
 DEBUG_PROBE_SCHEMA = _DEVICE_SELECTOR
 
-COMMAND_SWEEP_SCHEMA = _DEVICE_SELECTOR.extend(
-    {
-        vol.Optional("preset", default="clear_screen"): vol.In(
-            ["clear_screen", "opcode"]
-        ),
-        vol.Optional("opcode", default="A504"): cv.string,
-        vol.Optional("payloads"): vol.All(cv.ensure_list, [cv.string]),
-        vol.Optional("settle", default=1.5): vol.All(
-            vol.Coerce(float), vol.Range(0.1, 10.0)
-        ),
-    }
-)
-
 DEBUG_COMMAND_SCHEMA = _DEVICE_SELECTOR.extend(
     {
         vol.Required("payload"): cv.string,
@@ -93,11 +76,9 @@ DEBUG_COMMAND_SCHEMA = _DEVICE_SELECTOR.extend(
     }
 )
 
-# Shared knobs: the pixel format is undocumented, so every plausible variant
-# has to be reachable without a new release.
+# Shared knobs. The pixel format itself is settled and no longer adjustable;
+# what is left is how the source picture should be fitted onto the panel.
 _ENCODING_FIELDS = {
-    vol.Optional("encoding", default="auto"): vol.In(ENCODINGS),
-    vol.Optional("bit_order", default="msb"): vol.In(BIT_ORDERS),
     vol.Optional("rotate", default=0): vol.All(
         vol.Coerce(int), vol.In([0, 90, 180, 270])
     ),
@@ -106,8 +87,23 @@ _ENCODING_FIELDS = {
     vol.Optional("dither", default=True): cv.boolean,
 }
 
-SET_IMAGE_SCHEMA = _DEVICE_SELECTOR.extend(
-    {vol.Required("path"): cv.string, **_ENCODING_FIELDS}
+
+def _exactly_one_source(data: dict) -> dict:
+    """Require a path or a URL, and refuse both at once."""
+    if bool(data.get("path")) == bool(data.get("url")):
+        raise vol.Invalid("give either path or url, not both and not neither")
+    return data
+
+
+SET_IMAGE_SCHEMA = vol.All(
+    _DEVICE_SELECTOR.extend(
+        {
+            vol.Exclusive("path", "source"): cv.string,
+            vol.Exclusive("url", "source"): vol.All(cv.string, cv.url),
+            **_ENCODING_FIELDS,
+        }
+    ),
+    _exactly_one_source,
 )
 
 SEND_TEST_PATTERN_SCHEMA = _DEVICE_SELECTOR.extend(
@@ -118,60 +114,50 @@ SEND_TEST_PATTERN_SCHEMA = _DEVICE_SELECTOR.extend(
 )
 
 
-def _notify(
-    hass: HomeAssistant, *, title: str, notification_id: str, body: str
-) -> None:
-    """Post a persistent notification, the only channel a sweep can report on."""
-    persistent_notification.async_create(
-        hass, body, title=title, notification_id=notification_id
-    )
+# A full panel is 17664 bytes, so anything remotely reasonable fits easily.
+# The cap is only here so a wrong URL cannot pull an arbitrarily large body
+# into memory before Pillow ever sees it.
+MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024
+DOWNLOAD_TIMEOUT_S = 30
 
 
-def _run_detached(
-    hass: HomeAssistant,
-    device: ESLDevice,
-    *,
-    label: str,
-    notification_id: str,
-    factory: Callable[[], Awaitable[dict]],
-) -> None:
-    """Run a sweep in the background and report through notifications.
+async def _fetch_image(hass: HomeAssistant, url: str) -> bytes:
+    """Download an image, with the failure modes spelled out.
 
-    A sweep wakes the label once per candidate and a sleeping label can take
-    three minutes to advertise, so a full sweep runs for many minutes. Awaiting
-    that inside the service call means the caller - the frontend, a script,
-    an automation - sits on an open call for the whole time and gives up long
-    before the label does; the error it then shows has no text at all, which
-    is where the bare "undefined" came from. The work itself was fine, nobody
-    was left to receive it.
+    Home Assistant does not allowlist outgoing URLs the way it allowlists
+    file paths, and neither do its own image entities, so this does not
+    either - the caller is already an authenticated user. What it does do
+    is refuse anything that is not http(s), give up after a timeout instead
+    of hanging a service call, and stop reading past the size cap.
     """
-    title = f"ESL {label} {device.address}"
-    _notify(
-        hass,
-        title=title,
-        notification_id=notification_id,
-        body=(
-            "Running. Waking a sleeping label can take three minutes per "
-            "reconnect, so this may run for a while. The result replaces "
-            "this notification."
-        ),
-    )
+    if not url.lower().startswith(("http://", "https://")):
+        raise ServiceValidationError(f"url must be http or https, got {url!r}")
 
-    async def _runner() -> None:
-        try:
-            report = await factory()
-        except Exception as err:  # noqa: BLE001 - the report IS the result
-            # Never let this surface as an empty message: some BLE timeouts
-            # stringify to "" and the frontend renders that as "undefined".
-            _LOGGER.exception("ESL %s on %s failed", label, device.address)
-            body = f"Failed: {type(err).__name__}: {err or 'no detail'}"
-        else:
-            body = "```json\n" + json.dumps(report, indent=2, default=str) + "\n```"
-        _notify(hass, title=title, notification_id=notification_id, body=body)
+    session = async_get_clientsession(hass)
+    try:
+        response = await session.get(
+            url, timeout=aiohttp.ClientTimeout(total=DOWNLOAD_TIMEOUT_S)
+        )
+        async with response:
+            if response.status != 200:
+                raise ServiceValidationError(f"{url} returned HTTP {response.status}")
+            # Trust the body, not the header: Content-Length is optional and
+            # can lie, so cap while reading.
+            data = await response.content.read(MAX_DOWNLOAD_BYTES + 1)
+    except TimeoutError as err:
+        raise ServiceValidationError(
+            f"{url} did not respond within {DOWNLOAD_TIMEOUT_S}s"
+        ) from err
+    except aiohttp.ClientError as err:
+        raise ServiceValidationError(f"Could not fetch {url}: {err}") from err
 
-    hass.async_create_background_task(
-        _runner(), f"{DOMAIN} {label} {device.address}", eager_start=False
-    )
+    if len(data) > MAX_DOWNLOAD_BYTES:
+        raise ServiceValidationError(
+            f"{url} is larger than the {MAX_DOWNLOAD_BYTES} byte limit"
+        )
+    if not data:
+        raise ServiceValidationError(f"{url} returned an empty body")
+    return data
 
 
 def _outcome(device: ESLDevice, record: dict) -> dict:
@@ -252,7 +238,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         for device in _resolve_devices(hass, call):
             await async_probe_and_notify(hass, device)
 
-    async def _debug_command(call: ServiceCall) -> None:
+    async def _debug_command(call: ServiceCall) -> ServiceResponse:
         """Write raw bytes to the command characteristic.
 
         The document leaves the exact command encoding open in places, so
@@ -269,15 +255,16 @@ def async_setup_services(hass: HomeAssistant) -> None:
         if not payload:
             raise ServiceValidationError("payload must not be empty")
 
+        results = []
         for device in _resolve_devices(hass, call):
-            await device.async_send_raw_command(
+            record = await device.async_send_raw_command(
                 payload, expect_response=call.data["expect_response"]
             )
+            results.append(_outcome(device, record))
+        return {"results": results}
 
     def _request_from(call: ServiceCall, **source) -> ImageRequest:
         return ImageRequest(
-            encoding=call.data["encoding"],
-            bit_order=call.data["bit_order"],
             rotate=call.data["rotate"],
             mirror=call.data["mirror"],
             invert=call.data["invert"],
@@ -285,49 +272,18 @@ def async_setup_services(hass: HomeAssistant) -> None:
             **source,
         )
 
-    async def _command_sweep(call: ServiceCall) -> None:
-        """Try several command encodings in one wake-up and report the deltas."""
-        if raw_payloads := call.data.get("payloads"):
-            try:
-                payloads = [
-                    bytes.fromhex(item.replace(" ", "").replace(":", ""))
-                    for item in raw_payloads
-                ]
-            except ValueError as err:
-                raise ServiceValidationError(f"payloads must be hex: {err}") from err
-        elif call.data["preset"] == "clear_screen":
-            # Both documented clear paths rather than byte permutations of one.
-            payloads = clear_screen_candidates()
-        else:
-            try:
-                opcode = int(call.data["opcode"].replace("0x", ""), 16)
-            except ValueError as err:
-                raise ServiceValidationError(
-                    f"opcode must be hex, got {call.data['opcode']!r}"
-                ) from err
-            payloads = command_variants(opcode)
-
-        if not payloads:
-            raise ServiceValidationError("nothing to send")
-
-        for device in _resolve_devices(hass, call):
-            _run_detached(
-                hass,
-                device,
-                label="command sweep",
-                notification_id=f"{DOMAIN}_sweep_{device.address}",
-                factory=partial(
-                    device.async_command_sweep, payloads, settle=call.data["settle"]
-                ),
-            )
-
     async def _set_image(call: ServiceCall) -> ServiceResponse:
-        path = call.data["path"]
-        if not hass.config.is_allowed_path(path):
-            raise ServiceValidationError(
-                f"Path {path} is not allowed, add it to allowlist_external_dirs"
-            )
-        request = _request_from(call, path=path)
+        if url := call.data.get("url"):
+            request = _request_from(call, data=await _fetch_image(hass, url))
+            # So the image entity and the response can say where it came from.
+            request.source_name = url
+        else:
+            path = call.data["path"]
+            if not hass.config.is_allowed_path(path):
+                raise ServiceValidationError(
+                    f"Path {path} is not allowed, add it to allowlist_external_dirs"
+                )
+            request = _request_from(call, path=path)
         results = []
         for device in _resolve_devices(hass, call):
             results.append(_outcome(device, await device.async_send_image(request)))
@@ -369,10 +325,11 @@ def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN, SERVICE_DEBUG_PROBE, _debug_probe, schema=DEBUG_PROBE_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_DEBUG_COMMAND, _debug_command, schema=DEBUG_COMMAND_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN, SERVICE_COMMAND_SWEEP, _command_sweep, schema=COMMAND_SWEEP_SCHEMA
+        DOMAIN,
+        SERVICE_DEBUG_COMMAND,
+        _debug_command,
+        schema=DEBUG_COMMAND_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,

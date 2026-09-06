@@ -36,11 +36,9 @@
         "title": "ESL options",
         "data": {
           "scan_interval_min": "Poll interval (0 disables polling)",
-          "write_mode": "Command write mode",
           "linger_s": "Keep connection open (seconds)"
         },
         "data_description": {
-          "write_mode": "How commands are written over Bluetooth. Try 'without response' if the LED and clear screen do nothing while sensors still update.",
           "linger_s": "How long to hold the Bluetooth connection after a command. Reconnecting means waiting for the label to advertise again, which takes minutes, so a short linger makes follow-up commands instant. 0 disconnects immediately."
         }
       }
@@ -154,7 +152,7 @@
         },
         "path": {
           "name": "File path",
-          "description": "Path to the image. Must be inside an allowed directory."
+          "description": "File to send. Must be under allowlist_external_dirs. Give either this or a URL."
         },
         "rotate": {
           "name": "Rotation",
@@ -168,17 +166,13 @@
           "name": "Dither",
           "description": "Apply Floyd-Steinberg dithering."
         },
-        "encoding": {
-          "name": "Encoding",
-          "description": "Pixel format to try. 'auto' follows the panel model. The vendor document does not specify this, so trying variants is expected."
-        },
-        "bit_order": {
-          "name": "Bit order",
-          "description": "Whether the first pixel sits in the most or least significant bits of a byte."
-        },
         "mirror": {
           "name": "Mirror",
           "description": "Flip horizontally."
+        },
+        "url": {
+          "name": "URL",
+          "description": "Image to download and send. Give either this or a path."
         }
       }
     },
@@ -222,14 +216,6 @@
           "name": "Pattern",
           "description": "Which built-in pattern to send."
         },
-        "encoding": {
-          "name": "Encoding",
-          "description": "Pixel format to try. 'auto' follows the panel model. The vendor document does not specify this, so trying variants is expected."
-        },
-        "bit_order": {
-          "name": "Bit order",
-          "description": "Whether the first pixel sits in the most or least significant bits of a byte."
-        },
         "rotate": {
           "name": "Rotation",
           "description": "Rotate before fitting to the panel."
@@ -246,41 +232,6 @@
           "name": "Dither",
           "description": "Apply Floyd-Steinberg dithering."
         }
-      }
-    },
-    "debug_command_sweep": {
-      "name": "Debug command sweep",
-      "description": "Sends several encodings of one command in a single connection and reports how the status characteristic reacted to each. Runs in the background and reports through a persistent notification: waking the label is the slow part, so the service call returns straight away. The link is only dropped after a candidate the label rejects.",
-      "fields": {
-        "device_id": {
-          "name": "Label",
-          "description": "The ESL to send this to."
-        },
-        "opcode": {
-          "name": "Opcode",
-          "description": "Command to try, as hex. Variants are derived from it: big endian, little endian, and with trailing length bytes."
-        },
-        "payloads": {
-          "name": "Payloads",
-          "description": "Explicit list of hex payloads. Overrides opcode."
-        },
-        "settle": {
-          "name": "Settle time",
-          "description": "Seconds to wait after each write before reading the status back."
-        },
-        "preset": {
-          "name": "Candidate set",
-          "description": "clear_screen tries both documented ways to clear the panel (0xA504 and 0xA509 with index -2). opcode derives byte order variants from the opcode field instead."
-        }
-      }
-    }
-  },
-  "selector": {
-    "write_mode": {
-      "options": {
-        "auto": "Automatic",
-        "with_response": "With response",
-        "without_response": "Without response"
       }
     }
   }

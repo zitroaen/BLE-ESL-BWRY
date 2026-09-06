@@ -15,14 +15,11 @@ from .const import (
     CONF_LINGER_S,
     CONF_MODEL,
     CONF_SCAN_INTERVAL_MIN,
-    CONF_WRITE_MODE,
     DEFAULT_LINGER_S,
     DEFAULT_MODEL,
     DEFAULT_SCAN_INTERVAL_MIN,
-    DEFAULT_WRITE_MODE,
     DOMAIN,
     MODELS,
-    WRITE_MODES,
 )
 
 MODEL_SELECTOR = selector.SelectSelector(
@@ -32,14 +29,6 @@ MODEL_SELECTOR = selector.SelectSelector(
             for key, info in MODELS.items()
         ],
         mode=selector.SelectSelectorMode.DROPDOWN,
-    )
-)
-
-WRITE_MODE_SELECTOR = selector.SelectSelector(
-    selector.SelectSelectorConfig(
-        options=list(WRITE_MODES),
-        mode=selector.SelectSelectorMode.DROPDOWN,
-        translation_key="write_mode",
     )
 )
 
@@ -176,7 +165,6 @@ class ESLOptionsFlow(OptionsFlow):
                 data={
                     CONF_SCAN_INTERVAL_MIN: int(user_input[CONF_SCAN_INTERVAL_MIN]),
                     CONF_LINGER_S: int(user_input[CONF_LINGER_S]),
-                    CONF_WRITE_MODE: user_input[CONF_WRITE_MODE],
                 }
             )
 
@@ -195,10 +183,6 @@ class ESLOptionsFlow(OptionsFlow):
                         CONF_LINGER_S,
                         default=options.get(CONF_LINGER_S, DEFAULT_LINGER_S),
                     ): LINGER_SELECTOR,
-                    vol.Required(
-                        CONF_WRITE_MODE,
-                        default=options.get(CONF_WRITE_MODE, DEFAULT_WRITE_MODE),
-                    ): WRITE_MODE_SELECTOR,
                 }
             ),
         )

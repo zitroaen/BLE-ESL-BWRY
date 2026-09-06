@@ -277,40 +277,6 @@ def test_no_little_endian_window_yields_the_true_battery():
     assert big.index(REAL_BATTERY_CHARACTERISTIC_MV) == 8
 
 
-def test_real_advertisement_report_is_labelled():
-    """The report must say which byte order was used and why."""
-    report = protocol.describe_advertisement(REAL_ADVERT)
-    assert report["parsed"]["battery_mv"] == REAL_BATTERY_CHARACTERISTIC_MV
-    assert "little endian" in report["parsed"]["byte_order"]
-    assert "big endian" in report["parsed"]["byte_order"]
-    assert report["parsed"]["version_bytes"] == "30 00 00 0e 03 30 02 01"
-
-
-def test_clear_screen_candidates_cover_both_documented_paths():
-    """The document offers two ways to clear, and they are not equivalent.
-
-    3.7 is "Unbind Clear Screen", which sounds tied to pairing; 3.10 with
-    index -2 is the ordinary refresh path. Sweeping byte permutations of 3.7
-    alone would never reach the second one.
-    """
-    candidates = protocol.clear_screen_candidates()
-
-    assert bytes((0xA5, 0x04)) in candidates
-    assert bytes((0xA5, 0x09, 0xFE, 0xFE)) in candidates
-    assert len(set(candidates)) == len(candidates), "no duplicates"
-
-
-def test_multi_refresh_indices_are_signed_bytes():
-    """-2 means clear screen and must reach the wire as 0xFE."""
-    import struct
-
-    assert struct.pack("<bb", const.MULTI_INDEX_CLEAR, const.MULTI_INDEX_CLEAR) == (
-        b"\xfe\xfe"
-    )
-    clear_both = bytes((0xA5, 0x09, 0xFE, 0xFE))
-    assert clear_both in protocol.clear_screen_candidates()
-
-
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

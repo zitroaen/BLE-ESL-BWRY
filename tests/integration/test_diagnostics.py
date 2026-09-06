@@ -12,10 +12,7 @@ from pytest_homeassistant_custom_component.components.diagnostics import (
 )
 
 from custom_components.esl_zhsunyco.const import (
-    CONF_WRITE_MODE,
     MANUFACTURER_ID,
-    WRITE_MODE_AUTO,
-    WRITE_MODE_NO_RESPONSE,
 )
 
 
@@ -63,44 +60,16 @@ async def test_diagnostics_redact_address(
     assert result["entry"]["data"]["address"] == "**REDACTED**"
 
 
-async def test_write_mode_defaults_to_with_response(
+async def test_commands_always_write_with_response(
     hass: HomeAssistant, config_entry, mock_bluetooth
 ) -> None:
-    """The verified transfers all wrote with response, so that is the default."""
-    device = await _setup(hass, config_entry)
-    assert device.write_response is True
+    """There is nothing to configure here any more.
 
-
-async def test_write_mode_auto_leaves_the_choice_to_bleak(
-    hass: HomeAssistant, config_entry, mock_bluetooth
-) -> None:
-    """Auto is still selectable and still means "no opinion"."""
-    device = await _setup(hass, config_entry)
-
-    hass.config_entries.async_update_entry(
-        config_entry,
-        options={**config_entry.options, CONF_WRITE_MODE: WRITE_MODE_AUTO},
-    )
-    await hass.async_block_till_done()
-    assert device.write_response is None
-
-
-async def test_retired_write_mode_falls_back_to_with_response(
-    hass: HomeAssistant, config_entry, mock_bluetooth
-) -> None:
-    """The command characteristic has no write-without-response property.
-
-    Measured on hardware: it advertises ['read', 'write'] and nothing else,
-    so honouring a stored "without_response" would only produce a bleak
-    error. An entry that still carries it has to keep working.
+    The command characteristic advertises ['read', 'write'] and nothing
+    else, so write-without-response was never possible on this hardware and
+    the option that offered it is gone.
     """
     device = await _setup(hass, config_entry)
-
-    hass.config_entries.async_update_entry(
-        config_entry,
-        options={**config_entry.options, CONF_WRITE_MODE: WRITE_MODE_NO_RESPONSE},
-    )
-    await hass.async_block_till_done()
     assert device.write_response is True
 
 
@@ -289,10 +258,15 @@ async def test_test_pattern_button_uploads_panel_sized_data(
     assert len(uploaded[0]) == 184 * 384 // 4
 
 
-async def test_send_test_pattern_service_honours_encoding(
+async def test_the_panel_model_decides_the_packing(
     hass: HomeAssistant, config_entry, mock_bluetooth
 ) -> None:
-    """The encoding knob must reach the packer, so a sweep is meaningful."""
+    """There is no encoding knob any more; the model settles it.
+
+    A BLE-35BWRY is a four colour panel, so a full screen is two bits per
+    pixel. That was measured, not chosen, which is why the caller no longer
+    gets to override it.
+    """
     from unittest.mock import AsyncMock, patch
 
     from homeassistant.helpers import device_registry as dr
@@ -331,10 +305,9 @@ async def test_send_test_pattern_service_honours_encoding(
             {
                 "device_id": device_entry.id,
                 "pattern": "solid_black",
-                "encoding": "mono",
             },
             blocking=True,
         )
 
     assert len(uploaded) == 1
-    assert len(uploaded[0]) == 184 * 384 // 8
+    assert len(uploaded[0]) == 184 * 384 // 4

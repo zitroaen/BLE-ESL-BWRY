@@ -27,7 +27,6 @@ from .const import (
     CONF_LINGER_S,
     CONF_MODEL,
     CONF_SCAN_INTERVAL_MIN,
-    CONF_WRITE_MODE,
     DEFAULT_LINGER_S,
     DEFAULT_MODEL,
     DEFAULT_PIXEL_FORMAT,
@@ -35,7 +34,6 @@ from .const import (
     DEFAULT_RGB_ON_MS,
     DEFAULT_RGB_WORK_MS,
     DEFAULT_SCAN_INTERVAL_MIN,
-    DEFAULT_WRITE_MODE,
     DOMAIN,
     ERROR_CODES,
     MANUFACTURER_ID,
@@ -44,8 +42,6 @@ from .const import (
     UUID_COMMAND,
     UUID_SECURITY,
     UUID_STATUS,
-    WRITE_MODE_NO_RESPONSE,
-    WRITE_MODE_RESPONSE,
 )
 from .image_store import PanelImageStore
 
@@ -236,22 +232,16 @@ class ESLDevice:
         self._client = None
 
     @property
-    def write_response(self) -> bool | None:
-        """ATT write type for commands, or None to let bleak decide."""
-        mode = self.entry.options.get(CONF_WRITE_MODE, DEFAULT_WRITE_MODE)
-        if mode == WRITE_MODE_NO_RESPONSE:
-            # The command characteristic has no write-without-response
-            # property, so honouring this would only produce a bleak error.
-            _LOGGER.warning(
-                "%s is configured for %s, which this label does not support; "
-                "writing with response instead",
-                self.address,
-                WRITE_MODE_NO_RESPONSE,
-            )
-            return True
-        if mode == WRITE_MODE_RESPONSE:
-            return True
-        return None
+    def write_response(self) -> bool:
+        """ATT write type for commands.
+
+        Always with response. The command characteristic advertises
+        ['read', 'write'] and nothing else - measured, see
+        docs/hardware-verified-findings.md section 1 - so there was never a
+        second option to choose between, and the verified transfers all used
+        writes with response.
+        """
+        return True
 
     @callback
     def _seed_from_stack(self) -> bool:
@@ -773,7 +763,9 @@ class ESLDevice:
         # is still the one the panel is displaying.
         self.state.last_image_png = rendered.preview_png
         self.state.last_image_at = dt_util.utcnow()
-        self.state.last_image_source = request.path or request.pattern
+        self.state.last_image_source = (
+            request.source_name or request.path or request.pattern
+        )
         await self._image_store.async_save(
             rendered.preview_png,
             self.state.last_image_at,
@@ -828,101 +820,20 @@ class ESLDevice:
 
     async def async_send_raw_command(
         self, payload: bytes, *, expect_response: bool = True
-    ) -> None:
+    ) -> dict[str, Any]:
         """Write arbitrary bytes to the command characteristic.
 
-        Only for working out an encoding the document leaves open; nothing
-        in the integration uses this path.
+        The escape hatch for an opcode the document leaves open. Nothing in
+        the integration uses this path; it goes through the normal command
+        machinery, so it watches the status byte and reports the same way
+        every other command does.
         """
-        await self.async_command_sweep([payload], response=expect_response)
-
-    async def async_command_sweep(
-        self,
-        payloads: list[bytes],
-        *,
-        response: bool | None = None,
-        settle: float = 1.5,
-    ) -> dict[str, Any]:
-        """Send each command encoding on its own connection and watch status.
-
-        A rejected command makes the label revoke authorisation: measured on
-        hardware, writing 04 a5 was followed by the label answering the next
-        plain READ with ATT error 0x08, insufficient authorization, so
-        everything tried after that on the same link would be meaningless.
-        A candidate the label merely ignores does no such damage, so the
-        connection is only dropped after a rejection or a lost link. Each
-        entry records whether it ran on a fresh connection.
-        """
-        if response is None:
-            response = self.write_response
-
-        results: list[dict[str, Any]] = []
-        report: dict[str, Any] = {
-            "address": self.address,
-            "note": (
-                "the link is dropped after a rejected candidate, because a "
-                "rejection revokes the unlock and everything tried after it "
-                "on the same link would prove nothing; a candidate the label "
-                "merely ignores keeps the link, see fresh_connection"
+        return await self._run_command(
+            f"debug_command {payload.hex(' ')}",
+            lambda client: protocol.send_command(
+                client, payload, response=expect_response
             ),
-            "results": results,
-        }
-
-        for payload in payloads:
-            entry: dict[str, Any] = {"payload": payload.hex(" ")}
-            entry["fresh_connection"] = not self.connected
-            try:
-                async with self.connection() as client:
-                    entry["unlock_verified"] = self.state.unlock_verified
-                    entry["status_before"] = await _read_status(client)
-
-                    await protocol.send_command(client, payload, response=response)
-                    entry["write"] = "ok"
-
-                    await asyncio.sleep(settle)
-                    watched = await _watch_status(client)
-                    entry["status_after"] = watched
-                    entry["label_reacted"] = bool(watched.get("became_busy"))
-                    entry["connected_after"] = bool(
-                        getattr(client, "is_connected", True)
-                    )
-            except Exception as err:  # noqa: BLE001 - report and keep going
-                entry["error"] = f"{type(err).__name__}: {err}"
-                entry["label_reacted"] = False
-
-            entry["rejected"] = _looks_rejected(entry)
-            results.append(entry)
-            if entry.get("label_reacted"):
-                break
-
-            # Only a rejection needs a fresh link. A candidate the label
-            # merely ignored leaves the connection unlocked and usable, and
-            # reconnecting costs another wake-up - up to three minutes each,
-            # which is what turned this sweep into a twenty minute service
-            # call. Keep the link when it is still good.
-            if entry["rejected"] or not self.connected:
-                await self._async_disconnect()
-
-        winner = next(
-            (item["payload"] for item in results if item.get("label_reacted")), None
         )
-        report["working_payload"] = winner
-        report["any_status_changed"] = winner is not None
-        tolerated = [
-            item["payload"]
-            for item in results
-            if not item.get("rejected") and not item.get("label_reacted")
-        ]
-        report["tolerated_but_ignored"] = tolerated
-        report["conclusion"] = (
-            f"the label acted on {winner}"
-            if winner
-            else "no candidate made the panel react; "
-            f"tolerated without reaction: {tolerated or 'none'}"
-        )
-        self.state.last_command = report
-        _LOGGER.warning("ESL command sweep %s: %s", self.address, report)
-        return report
 
     async def async_probe(self, wait: int = ADVERTISEMENT_WAIT_S) -> dict[str, Any]:
         """Collect a full diagnostic report.
@@ -955,9 +866,6 @@ class ESLDevice:
 
         report["address"] = self.address
         report["model"] = self.model
-        report["write_mode_option"] = self.entry.options.get(
-            CONF_WRITE_MODE, DEFAULT_WRITE_MODE
-        )
         report["advertisement"] = {
             "battery_v": self.battery_v,
             "raw_by_company_id": dict(self.state.advert_raw),
@@ -965,11 +873,6 @@ class ESLDevice:
         }
         self.state.last_probe = report
         return report
-
-    async def async_refresh_multi(self, index_a: int, index_b: int) -> None:
-        """Switch between stored multi-screen images (section 3.10)."""
-        async with self.connection() as client:
-            await protocol.refresh_multi(client, index_a, index_b)
 
 
 # The two characteristics every command path needs. A connection whose GATT
@@ -1048,17 +951,6 @@ async def _watch_status(client: BleakClientWithServiceCache) -> dict[str, Any]:
 
 # ATT error 0x08. The label answers with this once it decides a client is no
 # longer authorised, which it does after a command it rejects.
-_REJECTION_MARKERS = ("insufficient authorization", "insufficient authentication")
-
-
-def _looks_rejected(entry: dict[str, Any]) -> bool:
-    """Report whether the label revoked access rather than just ignoring it."""
-    text = repr(entry).lower()
-    if any(marker in text for marker in _REJECTION_MARKERS):
-        return True
-    return entry.get("connected_after") is False
-
-
 async def _async_close(client: BleakClientWithServiceCache, address: str) -> None:
     """Close a connection without letting teardown failures surface."""
     try:

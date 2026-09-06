@@ -24,15 +24,11 @@ from .const import (
     CMD_IMAGE_REFRESH_COMP,
     CMD_IMAGE_REFRESH_RAW,
     CMD_IMAGE_STORE,
-    CMD_MULTI_REFRESH,
-    CMD_MULTI_STORE,
     CMD_RGB,
     EASYTAG_NOTIFY,
     EASYTAG_SERVICE,
     EASYTAG_WRITE,
     ERROR_CODES,
-    MULTI_SLOT_MAX,
-    MULTI_SLOT_MIN,
     PROTOCOL_EASYTAG,
     PROTOCOL_UNKNOWN,
     PROTOCOL_WOLINK,
@@ -265,36 +261,6 @@ async def send_image(
     await send_command(client, command + struct.pack("<I", len(data)))
 
 
-async def store_multi_image(client: BleakClient, slot: int, data: bytes) -> None:
-    r"""Store a block-compressed image into a multi-screen slot (section 3.9).
-
-    The payload is prefixed with the six byte header ``PIC0x\\0`` where x is
-    the slot index. Storage is terminated by 0xA503 + picture length 4B.
-    """
-    if not MULTI_SLOT_MIN <= slot <= MULTI_SLOT_MAX:
-        raise ESLProtocolError(
-            f"slot {slot} out of range {MULTI_SLOT_MIN}..{MULTI_SLOT_MAX}"
-        )
-    # The document writes the header as "PIC0x\0" (6 bytes) with x in 0..10,
-    # which only fits a single digit. Two digit formatting is the reading that
-    # keeps the length at 6 for every slot: PIC00..PIC10.
-    header = f"PIC{slot:02d}\0".encode("ascii")
-    await _store_blocks(client, CMD_MULTI_STORE, data, prefix=header)
-    # End of storage marker.
-    total = len(header) + len(data)
-    await send_command(client, CMD_MULTI_STORE + struct.pack("<I", total))
-
-
-async def refresh_multi(client: BleakClient, index_a: int, index_b: int) -> None:
-    """Refresh or clear the two multi-screen planes (section 3.10).
-
-    Index -2 clears the screen, -1 leaves it untouched, n >= 0 shows the
-    image stored in slot n.
-    """
-    payload = CMD_MULTI_REFRESH + struct.pack("<bb", index_a, index_b)
-    await send_command(client, payload)
-
-
 def parse_advertisement(payload: bytes) -> tuple[VersionInfo, int] | None:
     """Parse manufacturer specific data from the advertisement (section 1.2).
 
@@ -325,62 +291,6 @@ def parse_advertisement(payload: bytes) -> tuple[VersionInfo, int] | None:
     return VersionInfo(pid=pid, app_version=app, hw_version=hw, disp_version=disp), int(
         battery_mv
     )
-
-
-def clear_screen_candidates() -> list[bytes]:
-    """Every documented way to clear the panel, in order of evidence.
-
-    The document offers two paths, and they are not equivalent:
-
-      3.7   0xA504                     "Unbind Clear Screen"
-      3.10  0xA509 + index A + index B, index -2 meaning clear screen
-
-    "Unbind" suggests 3.7 is tied to pairing rather than being the ordinary
-    clear, so 3.10 with -2 in both planes is at least as likely to be the
-    path the firmware actually implements. Signed -2 and -1 are 0xFE and
-    0xFF on the wire.
-
-    Commands go out little endian, 04 a5 for clear screen included: that is
-    now measured for 0xA500, 0xA501, 0xA504 and 0xA508. See
-    docs/hardware-verified-findings.md sections 3 and 10.
-
-    An earlier revision marked 04 a5 "known rejected". That verdict came
-    from a sweep that wrote a5 04 first on the same connection; a rejected
-    command revokes authorisation, so 04 a5 was judged on a link that was
-    already dead. It was never tested cleanly.
-
-    The list stays for the opcodes that are still unmeasured - 0xA502 and
-    the multi-screen pair - and as the tool for the next unknown one.
-    """
-    return [
-        bytes((0x04, 0xA5)),  # 3.7, little endian like the verified commands
-        bytes((0x09, 0xA5, 0xFE, 0xFE)),  # 3.10, clear both planes
-        bytes((0x09, 0xA5, 0xFE, 0xFF)),  # 3.10, clear A, leave B
-        bytes((0x09, 0xA5, 0xFF, 0xFE)),  # 3.10, leave A, clear B
-        bytes((0x04, 0xA5, 0x00)),  # 3.7 with a zero length byte
-        bytes((0x04, 0xA5, 0x00, 0x00)),  # 3.7 with a zero length word
-        bytes((0xA5, 0x04)),  # 3.7 as the document writes it, big endian
-        bytes((0xA5, 0x09, 0xFE, 0xFE)),  # 3.10 big endian
-    ]
-
-
-def command_variants(opcode: int = 0xA504) -> list[bytes]:
-    """Plausible wire encodings of a two byte command.
-
-    The document writes commands as "0xA504" without saying how the two
-    bytes reach the wire, and this device mixes byte orders between its
-    advertisement and its characteristics. Little endian is the measured
-    answer for 0xA500 and 0xA501, so it leads here; the rest stay because
-    an untested opcode may still behave differently.
-    """
-    high, low = (opcode >> 8) & 0xFF, opcode & 0xFF
-    return [
-        bytes((low, high)),  # little endian, verified for 0xA500 / 0xA501
-        bytes((low, high, 0x00)),  # with a zero length byte
-        bytes((high, low)),  # as the document writes it, big endian
-        bytes((high, low, 0x00)),
-        bytes((high, low, 0x00, 0x00)),
-    ]
 
 
 def format_version(value: int) -> str:

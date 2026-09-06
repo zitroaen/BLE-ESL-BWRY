@@ -30,11 +30,11 @@ BWRY_PALETTE: list[tuple[int, int, int]] = [
 MONO_BLACK_BIT = 0
 
 
-# Encodings to try. The document never specifies the pixel format, so these
-# are the plausible shapes an e-ink controller uses and each is one service
-# call away rather than one release away.
-ENCODINGS = ("auto", "mono", "bwry_packed", "bwry_planes")
-BIT_ORDERS = ("msb", "lsb")
+# The panel decides the encoding. Both of these were measured on a
+# BLE-35BWRY: 2 bits per pixel MSB first for four colour panels, and the
+# separate bit planes some controllers use were ruled out. 1 bit panels are
+# still unverified, which is what "mono" is for.
+# See docs/hardware-verified-findings.md section 4.
 
 
 @dataclass(slots=True)
@@ -45,14 +45,15 @@ class ImageRequest:
     data: bytes | None = None
     pattern: str | None = None
     pixel_format: str = "mono"
-    encoding: str = "auto"
-    bit_order: str = "msb"
     rotate: int = 0
     mirror: bool = False
     invert: bool = False
     dither: bool = True
     stretch: bool = False
     background: tuple[int, int, int] = field(default=(255, 255, 255))
+    # What to call this image in the UI. Needed because a downloaded image
+    # arrives as raw bytes with no path to name it by.
+    source_name: str | None = None
 
 
 def _open_source(request: ImageRequest, width: int, height: int):
@@ -93,10 +94,9 @@ def _fit(image, width: int, height: int, background: tuple[int, int, int]):
     return canvas
 
 
-def _pack_bits(bits: list[int], width: int, height: int, bit_order: str) -> bytes:
+def _pack_bits(bits: list[int], width: int, height: int) -> bytes:
     """Pack single bit pixels, eight per byte, rows padded to whole bytes."""
     out = bytearray()
-    msb = bit_order == "msb"
     for y in range(height):
         row = bits[y * width : (y + 1) * width]
         for start in range(0, width, 8):
@@ -104,7 +104,7 @@ def _pack_bits(bits: list[int], width: int, height: int, bit_order: str) -> byte
             byte = 0
             for index in range(8):
                 bit = chunk[index] if index < len(chunk) else 0
-                byte |= bit << (7 - index) if msb else bit << index
+                byte |= bit << (7 - index)
             out.append(byte)
     return bytes(out)
 
@@ -127,12 +127,6 @@ def _mono_bits(image, invert: bool) -> list[int]:
     return bits
 
 
-def _pack_mono(image, invert: bool, bit_order: str = "msb") -> bytes:
-    """1 bit per pixel, rows padded to whole bytes."""
-    width, height = image.size
-    return _pack_bits(_mono_bits(image, invert), width, height, bit_order)
-
-
 def _bwry_codes(image, dither: bool) -> list[int]:
     """Quantise to the four colour palette, returning 0..3 per pixel."""
     from PIL import Image
@@ -153,10 +147,8 @@ def _bwry_codes(image, dither: bool) -> list[int]:
     return [pixels[x, y] & 0x03 for y in range(height) for x in range(width)]
 
 
-def _pack_codes(codes: list[int], width: int, height: int, bit_order: str) -> bytes:
+def _pack_codes(codes: list[int], width: int, height: int) -> bytes:
     """Pack two bit codes, four per byte, rows padded to whole bytes."""
-    msb = bit_order == "msb"
-
     out = bytearray()
     for y in range(height):
         row = codes[y * width : (y + 1) * width]
@@ -165,38 +157,13 @@ def _pack_codes(codes: list[int], width: int, height: int, bit_order: str) -> by
             byte = 0
             for index in range(4):
                 code = chunk[index] if index < len(chunk) else 0
-                shift = (3 - index) * 2 if msb else index * 2
-                byte |= code << shift
+                byte |= code << (3 - index) * 2
             out.append(byte)
     return bytes(out)
 
 
-def _pack_bwry(image, dither: bool, bit_order: str = "msb") -> bytes:
-    """2 bits per pixel, four pixels per byte, rows padded to whole bytes."""
-    width, height = image.size
-    return _pack_codes(_bwry_codes(image, dither), width, height, bit_order)
-
-
-def _pack_bwry_planes(image, dither: bool, bit_order: str = "msb") -> bytes:
-    """Pack the four colours as two separate 1 bit planes, high plane first.
-
-    E-ink controllers commonly address one plane at a time rather than
-    interleaving the bits, and the easyTag firmware from the same vendor does
-    exactly that. Same information as bwry_packed, different layout.
-    """
-    width, height = image.size
-    codes = _bwry_codes(image, dither)
-    high = [(code >> 1) & 1 for code in codes]
-    low = [code & 1 for code in codes]
-    return _pack_bits(high, width, height, bit_order) + _pack_bits(
-        low, width, height, bit_order
-    )
-
-
 def _resolve_encoding(request: ImageRequest) -> str:
-    """Turn 'auto' into the encoding implied by the panel."""
-    if request.encoding != "auto":
-        return request.encoding
+    """Return the packing this panel uses; the panel decides, not the caller."""
     return "bwry_packed" if request.pixel_format == "bwry" else "mono"
 
 
@@ -254,25 +221,13 @@ def render_image(request: ImageRequest, width: int, height: int) -> RenderedImag
     encoding = _resolve_encoding(request)
     if encoding == "bwry_packed":
         codes = _bwry_codes(image, request.dither)
-        packed = _pack_codes(codes, width, height, request.bit_order)
-    elif encoding == "bwry_planes":
-        codes = _bwry_codes(image, request.dither)
-        high = [(code >> 1) & 1 for code in codes]
-        low = [code & 1 for code in codes]
-        packed = _pack_bits(high, width, height, request.bit_order) + _pack_bits(
-            low, width, height, request.bit_order
-        )
+        packed = _pack_codes(codes, width, height)
     else:
         codes = _mono_bits(image, request.invert)
-        packed = _pack_bits(codes, width, height, request.bit_order)
+        packed = _pack_bits(codes, width, height)
 
     _LOGGER.debug(
-        "Rendered %dx%d as %s/%s: %d bytes",
-        width,
-        height,
-        encoding,
-        request.bit_order,
-        len(packed),
+        "Rendered %dx%d as %s: %d bytes", width, height, encoding, len(packed)
     )
     return RenderedImage(
         payload=packed,

@@ -13,7 +13,6 @@ DOMAIN: Final = "esl_zhsunyco"
 CONF_ADDRESS: Final = "address"
 CONF_MODEL: Final = "model"
 CONF_SCAN_INTERVAL_MIN: Final = "scan_interval_min"
-CONF_WRITE_MODE: Final = "write_mode"
 CONF_LINGER_S: Final = "linger_s"
 
 # The document says the challenge is unlocked with AES-128-ECB "encryption",
@@ -35,18 +34,6 @@ DEFAULT_LINGER_S: Final = 15
 # How commands are written. The document does not say which ATT write type
 # the label expects, and a label that only handles one of them silently
 # ignores the other, so this is exposed as an option.
-WRITE_MODE_AUTO: Final = "auto"
-WRITE_MODE_RESPONSE: Final = "with_response"
-# The command characteristic advertises ['read', 'write'] and nothing else -
-# no write-without-response - so this mode cannot work on this label. Kept
-# only so a config entry that still stores it keeps loading; it is no longer
-# offered and resolves to a write with response. See
-# docs/hardware-verified-findings.md section 1.
-WRITE_MODE_NO_RESPONSE: Final = "without_response"
-WRITE_MODES: Final = (WRITE_MODE_AUTO, WRITE_MODE_RESPONSE)
-# The verified transfers all used writes with response.
-DEFAULT_WRITE_MODE: Final = WRITE_MODE_RESPONSE
-
 # Keys used by the pre-HACS prototype, kept only for entry migration.
 LEGACY_CONF_MAC: Final = "mac_address"
 LEGACY_CONF_BATTERY_INTERVAL: Final = "battery_scan_interval"
@@ -113,21 +100,11 @@ CHALLENGE_LEN: Final = 16
 CMD_IMAGE_STORE: Final = b"\x00\xa5"  # 3.1  + data pointer 4B + data
 CMD_IMAGE_REFRESH_RAW: Final = b"\x01\xa5"  # 3.2  + picture data size
 CMD_IMAGE_REFRESH_COMP: Final = b"\x02\xa5"  # 3.3  + picture data size
-CMD_MULTI_STORE: Final = b"\x03\xa5"  # 3.9  + data pointer 4B + data
 CMD_CLEAR: Final = b"\x04\xa5"  # 3.7  no payload
 CMD_OTA_SEND: Final = b"\x05\xa5"  # 3.5  + data pointer 4B + data
 CMD_OTA_UPDATE: Final = b"\x06\xa5"  # 3.6  + size 4B + crc16 2B
 CMD_OTA_ERASE: Final = b"\x07\xa5"  # 3.4  no payload, wait 1s
 CMD_RGB: Final = b"\x08\xa5"  # 3.8  + r + g + b + on2 + off2 + work4
-CMD_MULTI_REFRESH: Final = b"\x09\xa5"  # 3.10 + index A 1B + index B 1B
-
-# Multi-screen indices (sec. 3.10), sent as signed bytes.
-MULTI_INDEX_CLEAR: Final = -2
-MULTI_INDEX_NO_REFRESH: Final = -1
-
-# Multi-screen slot header (sec. 3.9): 'PIC0x\0' with x in 0..10.
-MULTI_SLOT_MIN: Final = 0
-MULTI_SLOT_MAX: Final = 10
 
 # --- Advertising (sec. 1.2) ----------------------------------------------
 # Manufacturer specific data, bytes 0-1 are the company identifier 0xbbaa.
@@ -197,4 +174,3 @@ SERVICE_SET_IMAGE: Final = "set_image"
 SERVICE_DEBUG_PROBE: Final = "debug_probe"
 SERVICE_DEBUG_COMMAND: Final = "debug_command"
 SERVICE_SEND_TEST_PATTERN: Final = "send_test_pattern"
-SERVICE_COMMAND_SWEEP: Final = "debug_command_sweep"

@@ -36,11 +36,9 @@
         "title": "ESL-Optionen",
         "data": {
           "scan_interval_min": "Abfrageintervall (0 deaktiviert die Abfrage)",
-          "write_mode": "Schreibmodus für Kommandos",
           "linger_s": "Verbindung offen halten (Sekunden)"
         },
         "data_description": {
-          "write_mode": "Wie Kommandos über Bluetooth geschrieben werden. Probiere 'Ohne Bestätigung', wenn LED und Bildschirm löschen wirkungslos bleiben, die Sensoren aber aktualisieren.",
           "linger_s": "Wie lange die Bluetooth-Verbindung nach einem Kommando gehalten wird. Ein neuer Verbindungsaufbau bedeutet erneutes Warten auf ein Advertisement, was Minuten dauert — ein kurzes Offenhalten macht Folgekommandos daher sofort wirksam. 0 trennt sofort."
         }
       }
@@ -154,7 +152,7 @@
         },
         "path": {
           "name": "Dateipfad",
-          "description": "Pfad zum Bild. Muss in einem erlaubten Verzeichnis liegen."
+          "description": "Datei, die gesendet wird. Muss unter allowlist_external_dirs liegen. Entweder das oder eine URL."
         },
         "rotate": {
           "name": "Drehung",
@@ -168,17 +166,13 @@
           "name": "Dithering",
           "description": "Floyd-Steinberg-Dithering anwenden."
         },
-        "encoding": {
-          "name": "Kodierung",
-          "description": "Zu testendes Pixelformat. 'auto' richtet sich nach dem Panel-Modell. Die Hersteller-Doku legt das nicht fest, Ausprobieren ist also vorgesehen."
-        },
-        "bit_order": {
-          "name": "Bit-Reihenfolge",
-          "description": "Ob das erste Pixel in den höchst- oder niederwertigen Bits eines Bytes liegt."
-        },
         "mirror": {
           "name": "Spiegeln",
           "description": "Horizontal spiegeln."
+        },
+        "url": {
+          "name": "URL",
+          "description": "Bild, das heruntergeladen und gesendet wird. Entweder das oder ein Pfad."
         }
       }
     },
@@ -222,14 +216,6 @@
           "name": "Muster",
           "description": "Welches eingebaute Muster gesendet wird."
         },
-        "encoding": {
-          "name": "Kodierung",
-          "description": "Zu testendes Pixelformat. 'auto' richtet sich nach dem Panel-Modell. Die Hersteller-Doku legt das nicht fest, Ausprobieren ist also vorgesehen."
-        },
-        "bit_order": {
-          "name": "Bit-Reihenfolge",
-          "description": "Ob das erste Pixel in den höchst- oder niederwertigen Bits eines Bytes liegt."
-        },
         "rotate": {
           "name": "Drehung",
           "description": "Vor dem Einpassen drehen."
@@ -246,41 +232,6 @@
           "name": "Dithering",
           "description": "Floyd-Steinberg-Dithering anwenden."
         }
-      }
-    },
-    "debug_command_sweep": {
-      "name": "Kommando-Varianten testen",
-      "description": "Sendet mehrere Kodierungen eines Kommandos in einer einzigen Verbindung und meldet, wie die Status-Charakteristik jeweils reagiert hat. Läuft im Hintergrund und meldet sich über eine persistente Benachrichtigung; der Aufruf selbst kehrt sofort zurück, denn das Aufwecken des Labels dauert. Die Verbindung wird nur nach einem abgelehnten Kandidaten getrennt.",
-      "fields": {
-        "device_id": {
-          "name": "Label",
-          "description": "An welches ESL das gehen soll."
-        },
-        "opcode": {
-          "name": "Opcode",
-          "description": "Zu testendes Kommando als Hex. Die Varianten werden daraus abgeleitet: Big Endian, Little Endian und mit angehängten Längenbytes."
-        },
-        "payloads": {
-          "name": "Nutzdaten",
-          "description": "Explizite Liste von Hex-Payloads. Überschreibt den Opcode."
-        },
-        "settle": {
-          "name": "Wartezeit",
-          "description": "Sekunden nach jedem Schreibvorgang, bevor der Status zurückgelesen wird."
-        },
-        "preset": {
-          "name": "Kandidaten",
-          "description": "clear_screen probiert beide dokumentierten Löschwege (0xA504 und 0xA509 mit Index -2). opcode leitet stattdessen Byte-Reihenfolge-Varianten aus dem Opcode-Feld ab."
-        }
-      }
-    }
-  },
-  "selector": {
-    "write_mode": {
-      "options": {
-        "auto": "Automatisch",
-        "with_response": "Mit Bestätigung",
-        "without_response": "Ohne Bestätigung"
       }
     }
   }
