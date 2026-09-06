@@ -19,6 +19,7 @@ from .const import (
     RGB_WORK_MS_MAX,
     RGB_WORK_MS_MIN,
     SERVICE_CLEAR_SCREEN,
+    SERVICE_DEBUG_PROBE,
     SERVICE_SET_IMAGE,
     SERVICE_SET_RGB,
 )
@@ -54,6 +55,7 @@ SET_RGB_SCHEMA = _DEVICE_SELECTOR.extend(
 )
 
 CLEAR_SCREEN_SCHEMA = _DEVICE_SELECTOR
+DEBUG_PROBE_SCHEMA = _DEVICE_SELECTOR
 
 SET_IMAGE_SCHEMA = _DEVICE_SELECTOR.extend(
     {
@@ -114,6 +116,23 @@ def async_setup_services(hass: HomeAssistant) -> None:
         for device in _resolve_devices(hass, call):
             await device.async_clear_screen()
 
+    async def _debug_probe(call: ServiceCall) -> None:
+        """Collect a GATT report and surface it as a persistent notification."""
+        import json
+
+        from homeassistant.components import persistent_notification
+
+        for device in _resolve_devices(hass, call):
+            report = await device.async_probe()
+            pretty = json.dumps(report, indent=2, default=str)
+            _LOGGER.warning("ESL probe %s:\n%s", device.address, pretty)
+            persistent_notification.async_create(
+                hass,
+                f"```json\n{pretty}\n```",
+                title=f"ESL probe {device.address}",
+                notification_id=f"{DOMAIN}_probe_{device.address}",
+            )
+
     async def _set_image(call: ServiceCall) -> None:
         path = call.data["path"]
         if not hass.config.is_allowed_path(path):
@@ -137,4 +156,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN, SERVICE_SET_IMAGE, _set_image, schema=SET_IMAGE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_DEBUG_PROBE, _debug_probe, schema=DEBUG_PROBE_SCHEMA
     )

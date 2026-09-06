@@ -35,14 +35,20 @@
       "init": {
         "title": "ESL options",
         "data": {
-          "scan_interval_min": "Poll interval (0 disables polling)"
+          "scan_interval_min": "Poll interval (0 disables polling)",
+          "write_mode": "Command write mode"
+        },
+        "data_description": {
+          "write_mode": "How commands are written over Bluetooth. Try 'without response' if the LED and clear screen do nothing while sensors still update."
         }
       }
     }
   },
   "entity": {
     "sensor": {
-      "battery_voltage": { "name": "Battery voltage" },
+      "battery_voltage": {
+        "name": "Battery voltage"
+      },
       "status": {
         "name": "Status",
         "state": {
@@ -56,20 +62,36 @@
           "unknown": "Unknown"
         }
       },
-      "signal_strength": { "name": "Signal strength" },
-      "display_version": { "name": "Display version" },
-      "product_id": { "name": "Product ID" }
+      "signal_strength": {
+        "name": "Signal strength"
+      },
+      "display_version": {
+        "name": "Display version"
+      },
+      "product_id": {
+        "name": "Product ID"
+      }
     },
     "button": {
-      "clear_screen": { "name": "Clear screen" }
+      "clear_screen": {
+        "name": "Clear screen"
+      }
     },
     "light": {
-      "rgb": { "name": "RGB LED" }
+      "rgb": {
+        "name": "RGB LED"
+      }
     },
     "number": {
-      "rgb_on_ms": { "name": "RGB on time" },
-      "rgb_off_ms": { "name": "RGB off time" },
-      "rgb_work_ms": { "name": "RGB duration" }
+      "rgb_on_ms": {
+        "name": "RGB on time"
+      },
+      "rgb_off_ms": {
+        "name": "RGB off time"
+      },
+      "rgb_work_ms": {
+        "name": "RGB duration"
+      }
     }
   },
   "services": {
@@ -77,10 +99,22 @@
       "name": "Set RGB",
       "description": "Drives the label's RGB LED (command 0xA508).",
       "fields": {
-        "rgb_color": { "name": "Colour", "description": "RGB colour to show." },
-        "on_ms": { "name": "On time", "description": "Blink on time in milliseconds. Defaults to the RGB on time number entity." },
-        "off_ms": { "name": "Off time", "description": "Blink off time in milliseconds. Defaults to the RGB off time number entity." },
-        "work_ms": { "name": "Duration", "description": "Total run time in milliseconds. Defaults to the RGB duration number entity." }
+        "rgb_color": {
+          "name": "Colour",
+          "description": "RGB colour to show."
+        },
+        "on_ms": {
+          "name": "On time",
+          "description": "Blink on time in milliseconds. Defaults to the RGB on time number entity."
+        },
+        "off_ms": {
+          "name": "Off time",
+          "description": "Blink off time in milliseconds. Defaults to the RGB off time number entity."
+        },
+        "work_ms": {
+          "name": "Duration",
+          "description": "Total run time in milliseconds. Defaults to the RGB duration number entity."
+        }
       }
     },
     "clear_screen": {
@@ -91,10 +125,35 @@
       "name": "Set image",
       "description": "Renders an image file and uploads it to the panel. Experimental: the pixel format is not documented by the vendor.",
       "fields": {
-        "path": { "name": "File path", "description": "Path to the image. Must be inside an allowed directory." },
-        "rotate": { "name": "Rotation", "description": "Rotate the image before fitting it to the panel." },
-        "invert": { "name": "Invert", "description": "Invert black and white on 1 bit panels." },
-        "dither": { "name": "Dither", "description": "Apply Floyd-Steinberg dithering." }
+        "path": {
+          "name": "File path",
+          "description": "Path to the image. Must be inside an allowed directory."
+        },
+        "rotate": {
+          "name": "Rotation",
+          "description": "Rotate the image before fitting it to the panel."
+        },
+        "invert": {
+          "name": "Invert",
+          "description": "Invert black and white on 1 bit panels."
+        },
+        "dither": {
+          "name": "Dither",
+          "description": "Apply Floyd-Steinberg dithering."
+        }
+      }
+    },
+    "debug_probe": {
+      "name": "Debug probe",
+      "description": "Connects, enumerates the GATT table and reads every characteristic, then shows the result as a notification. Use this when something does not work."
+    }
+  },
+  "selector": {
+    "write_mode": {
+      "options": {
+        "auto": "Automatic",
+        "with_response": "With response",
+        "without_response": "Without response"
       }
     }
   }

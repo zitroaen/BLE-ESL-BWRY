@@ -121,7 +121,7 @@ async def test_set_rgb_service_uses_number_defaults(
 
     sent: list[tuple] = []
 
-    async def fake_set_rgb(client, r, g, b, on_ms, off_ms, work_ms):
+    async def fake_set_rgb(client, r, g, b, on_ms, off_ms, work_ms, response=None):
         sent.append((r, g, b, on_ms, off_ms, work_ms))
 
     with (

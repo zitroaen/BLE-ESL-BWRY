@@ -14,10 +14,13 @@ from .const import (
     CONF_ADDRESS,
     CONF_MODEL,
     CONF_SCAN_INTERVAL_MIN,
+    CONF_WRITE_MODE,
     DEFAULT_MODEL,
     DEFAULT_SCAN_INTERVAL_MIN,
+    DEFAULT_WRITE_MODE,
     DOMAIN,
     MODELS,
+    WRITE_MODES,
 )
 
 MODEL_SELECTOR = selector.SelectSelector(
@@ -27,6 +30,14 @@ MODEL_SELECTOR = selector.SelectSelector(
             for key, info in MODELS.items()
         ],
         mode=selector.SelectSelectorMode.DROPDOWN,
+    )
+)
+
+WRITE_MODE_SELECTOR = selector.SelectSelector(
+    selector.SelectSelectorConfig(
+        options=list(WRITE_MODES),
+        mode=selector.SelectSelectorMode.DROPDOWN,
+        translation_key="write_mode",
     )
 )
 
@@ -150,19 +161,27 @@ class ESLOptionsFlow(OptionsFlow):
         """Show and store the options."""
         if user_input is not None:
             return self.async_create_entry(
-                data={CONF_SCAN_INTERVAL_MIN: int(user_input[CONF_SCAN_INTERVAL_MIN])}
+                data={
+                    CONF_SCAN_INTERVAL_MIN: int(user_input[CONF_SCAN_INTERVAL_MIN]),
+                    CONF_WRITE_MODE: user_input[CONF_WRITE_MODE],
+                }
             )
 
-        current = self.config_entry.options.get(
-            CONF_SCAN_INTERVAL_MIN, DEFAULT_SCAN_INTERVAL_MIN
-        )
+        options = self.config_entry.options
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_SCAN_INTERVAL_MIN, default=current
-                    ): INTERVAL_SELECTOR
+                        CONF_SCAN_INTERVAL_MIN,
+                        default=options.get(
+                            CONF_SCAN_INTERVAL_MIN, DEFAULT_SCAN_INTERVAL_MIN
+                        ),
+                    ): INTERVAL_SELECTOR,
+                    vol.Required(
+                        CONF_WRITE_MODE,
+                        default=options.get(CONF_WRITE_MODE, DEFAULT_WRITE_MODE),
+                    ): WRITE_MODE_SELECTOR,
                 }
             ),
         )

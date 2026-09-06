@@ -27,6 +27,7 @@ from .const import (
     CMD_MULTI_REFRESH,
     CMD_MULTI_STORE,
     CMD_RGB,
+    ERROR_CODES,
     MULTI_SLOT_MAX,
     MULTI_SLOT_MIN,
     UUID_BATTERY,
@@ -96,8 +97,11 @@ async def send_command(
     """Write a command to the command characteristic (section 3).
 
     ``response`` is left to bleak by default so it picks write-with-response
-    or write-without-response from the characteristic's own properties.
+    or write-without-response from the characteristic's own properties. A
+    label that only implements one of the two ignores the other silently,
+    which is why this can be forced from the options flow.
     """
+    _LOGGER.debug("TX %s -> %s", payload.hex(" "), UUID_COMMAND)
     if response is None:
         await client.write_gatt_char(UUID_COMMAND, payload)
     else:
@@ -129,9 +133,9 @@ async def read_status(client: BleakClient) -> StatusInfo:
     return StatusInfo(busy=bool(raw[0]), error=int(raw[1]))
 
 
-async def clear_screen(client: BleakClient) -> None:
+async def clear_screen(client: BleakClient, *, response: bool | None = None) -> None:
     """Unbind / clear screen, command 0xA504 (section 3.7)."""
-    await send_command(client, CMD_CLEAR)
+    await send_command(client, CMD_CLEAR, response=response)
 
 
 async def set_rgb(
@@ -142,6 +146,8 @@ async def set_rgb(
     on_ms: int,
     off_ms: int,
     work_ms: int,
+    *,
+    response: bool | None = None,
 ) -> None:
     """Drive the RGB LED, command 0xA508 (section 3.8).
 
@@ -155,7 +161,7 @@ async def set_rgb(
     payload += struct.pack(
         "<HHI", on_ms & 0xFFFF, off_ms & 0xFFFF, work_ms & 0xFFFFFFFF
     )
-    await send_command(client, payload)
+    await send_command(client, payload, response=response)
 
 
 def _chunk_size(client: BleakClient, header_len: int) -> int:
@@ -249,3 +255,146 @@ def parse_advertisement(payload: bytes) -> tuple[VersionInfo, int] | None:
 def format_version(value: int) -> str:
     """Render a 16 bit version word as ``major.minor``."""
     return f"{value >> 8}.{value & 0xFF}"
+
+
+# --- diagnostics ----------------------------------------------------------
+
+# Candidate decodings for the battery field. The document says "mv", but the
+# observed values did not match, so every plausible rule is reported side by
+# side and the right one can be picked from real hardware output.
+BATTERY_CANDIDATES: dict[str, str] = {
+    "le_mv": "little endian, millivolts (as documented)",
+    "be_mv": "big endian, millivolts",
+    "le_tenth_mv": "little endian, 0.1 mV steps",
+    "be_tenth_mv": "big endian, 0.1 mV steps",
+}
+
+
+def decode_battery_candidates(raw: bytes, offset: int = 0) -> dict[str, float | None]:
+    """Decode two bytes under every candidate rule, in volts."""
+    if len(raw) < offset + 2:
+        return dict.fromkeys(BATTERY_CANDIDATES)
+    little = int(struct.unpack_from("<H", raw, offset)[0])
+    big = int(struct.unpack_from(">H", raw, offset)[0])
+    return {
+        "le_mv": round(little / 1000, 4),
+        "be_mv": round(big / 1000, 4),
+        "le_tenth_mv": round(little / 10000, 4),
+        "be_tenth_mv": round(big / 10000, 4),
+    }
+
+
+def describe_advertisement(payload: bytes) -> dict[str, object]:
+    """Break an advertisement payload down field by field.
+
+    Reports the documented layout plus the battery value at every two byte
+    offset, so a layout that differs from the document can be spotted.
+    """
+    fields: dict[str, object] = {
+        "raw": payload.hex(" "),
+        "length": len(payload),
+        "documented_layout_valid": len(payload) >= ADV_PAYLOAD_LEN,
+    }
+
+    if len(payload) >= ADV_PAYLOAD_LEN:
+        pid, app, hw, disp, battery = struct.unpack_from("<HHHHH", payload, 0)
+        fields["documented"] = {
+            "pid": f"0x{pid:04X}",
+            "app_version": format_version(app),
+            "hw_version": format_version(hw),
+            "disp_version": format_version(disp),
+            "battery_raw_le": battery,
+            "battery_candidates_v": decode_battery_candidates(payload, 8),
+        }
+
+    fields["battery_by_offset_v"] = {
+        f"offset_{offset}": decode_battery_candidates(payload, offset)
+        for offset in range(0, max(0, len(payload) - 1), 2)
+    }
+    return fields
+
+
+async def probe_device(client: BleakClient) -> dict[str, object]:
+    """Enumerate the GATT table and read every characteristic we know.
+
+    This answers the questions the vendor document leaves open: whether our
+    UUIDs exist at all, which ATT write types the label accepts, and what the
+    status characteristic reports right after an unlock attempt.
+    """
+    report: dict[str, object] = {}
+
+    services = []
+    for service in client.services:
+        characteristics = []
+        for char in service.characteristics:
+            characteristics.append(
+                {
+                    "uuid": str(char.uuid),
+                    "handle": char.handle,
+                    "properties": sorted(char.properties),
+                }
+            )
+        services.append({"uuid": str(service.uuid), "characteristics": characteristics})
+    report["services"] = services
+
+    known = {
+        "security": UUID_SECURITY,
+        "command": UUID_COMMAND,
+        "version": UUID_VERSION,
+        "status": UUID_STATUS,
+        "battery": UUID_BATTERY,
+    }
+    present = {}
+    for name, uuid in known.items():
+        char = client.services.get_characteristic(uuid)
+        present[name] = (
+            {"found": True, "properties": sorted(char.properties)}
+            if char is not None
+            else {"found": False}
+        )
+    report["known_characteristics"] = present
+
+    # Unlock, then read everything. The status error code is the direct
+    # answer to whether the unlock was accepted (5 means it was not).
+    unlock: dict[str, object] = {}
+    try:
+        challenge = bytes(await client.read_gatt_char(UUID_SECURITY))
+        unlock["challenge"] = challenge.hex(" ")
+        unlock["challenge_length"] = len(challenge)
+        token = _aes_ecb_encrypt(challenge.ljust(CHALLENGE_LEN, b"\0")[:CHALLENGE_LEN])
+        unlock["response"] = token.hex(" ")
+        await client.write_gatt_char(UUID_SECURITY, token)
+        unlock["write_ok"] = True
+    except Exception as err:  # noqa: BLE001 - a probe must not abort here
+        unlock["error"] = f"{type(err).__name__}: {err}"
+        unlock["write_ok"] = False
+    report["unlock"] = unlock
+
+    reads: dict[str, object] = {}
+    for name, uuid in (
+        ("version", UUID_VERSION),
+        ("battery", UUID_BATTERY),
+        ("status", UUID_STATUS),
+    ):
+        try:
+            raw = bytes(await client.read_gatt_char(uuid))
+            entry: dict[str, object] = {"raw": raw.hex(" "), "length": len(raw)}
+            if name == "battery":
+                entry["candidates_v"] = decode_battery_candidates(raw, 0)
+            if name == "status" and len(raw) >= 2:
+                entry["busy"] = bool(raw[0])
+                entry["error_code"] = raw[1]
+                entry["error_meaning"] = ERROR_CODES.get(raw[1], "undocumented")
+            if name == "version" and len(raw) >= 8:
+                pid, app, hw, disp = struct.unpack_from("<HHHH", raw, 0)
+                entry["pid"] = f"0x{pid:04X}"
+                entry["app_version"] = format_version(app)
+                entry["hw_version"] = format_version(hw)
+                entry["disp_version"] = format_version(disp)
+            reads[name] = entry
+        except Exception as err:  # noqa: BLE001 - report, do not abort
+            reads[name] = {"error": f"{type(err).__name__}: {err}"}
+    report["reads"] = reads
+
+    report["mtu_size"] = getattr(client, "mtu_size", None)
+    return report

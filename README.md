@@ -133,7 +133,31 @@ gebündelt, damit sie leicht korrigierbar sind:
 
 ## Fehlersuche
 
-Debug-Logging aktivieren:
+### Diagnose-Probe
+
+Der schnellste Weg, ein Problem einzugrenzen: Dienst
+`esl_zhsunyco.debug_probe` auf das Gerät aufrufen. Er verbindet sich, listet
+die komplette GATT-Tabelle mit allen Charakteristiken und deren Properties
+auf, versucht das Unlock und liest anschließend Version, Batterie und Status
+im Rohformat. Das Ergebnis erscheint als Benachrichtigung und im Log.
+
+Besonders aussagekräftig ist dabei `reads.status.error_meaning`:
+`unlock_failed` bedeutet, dass die Challenge/Response abgelehnt wurde, alles
+andere heißt, dass das Unlock funktioniert hat.
+
+Zusätzlich liefert **Einstellungen → Geräte & Dienste → Zhsunyco ESL →
+Diagnose herunterladen** eine JSON-Datei mit dem rohen Advertisement, der
+Feld-für-Feld-Zerlegung und den Batteriewerten unter allen plausiblen
+Dekodierregeln.
+
+### LED und Bildschirm löschen bleiben wirkungslos
+
+Wenn die Sensoren aktualisieren, Kommandos aber nichts bewirken, akzeptiert
+das Label vermutlich nur einen der beiden ATT-Schreibtypen. In den Optionen
+der Integration lässt sich der **Schreibmodus für Kommandos** von
+`Automatisch` auf `Ohne Bestätigung` bzw. `Mit Bestätigung` umstellen.
+
+### Debug-Logging aktivieren
 
 ```yaml
 logger:

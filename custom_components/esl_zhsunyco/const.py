@@ -13,6 +13,16 @@ DOMAIN: Final = "esl_zhsunyco"
 CONF_ADDRESS: Final = "address"
 CONF_MODEL: Final = "model"
 CONF_SCAN_INTERVAL_MIN: Final = "scan_interval_min"
+CONF_WRITE_MODE: Final = "write_mode"
+
+# How commands are written. The document does not say which ATT write type
+# the label expects, and a label that only handles one of them silently
+# ignores the other, so this is exposed as an option.
+WRITE_MODE_AUTO: Final = "auto"
+WRITE_MODE_RESPONSE: Final = "with_response"
+WRITE_MODE_NO_RESPONSE: Final = "without_response"
+WRITE_MODES: Final = (WRITE_MODE_AUTO, WRITE_MODE_RESPONSE, WRITE_MODE_NO_RESPONSE)
+DEFAULT_WRITE_MODE: Final = WRITE_MODE_AUTO
 
 # Keys used by the pre-HACS prototype, kept only for entry migration.
 LEGACY_CONF_MAC: Final = "mac_address"
@@ -138,3 +148,4 @@ DEFAULT_RGB_WORK_MS: Final = 30_000
 SERVICE_SET_RGB: Final = "set_rgb"
 SERVICE_CLEAR_SCREEN: Final = "clear_screen"
 SERVICE_SET_IMAGE: Final = "set_image"
+SERVICE_DEBUG_PROBE: Final = "debug_probe"

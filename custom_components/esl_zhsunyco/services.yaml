@@ -67,3 +67,8 @@ set_image:
       default: true
       selector:
         boolean:
+
+debug_probe:
+  target:
+    device:
+      integration: esl_zhsunyco

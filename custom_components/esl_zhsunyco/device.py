@@ -22,17 +22,21 @@ from .const import (
     CONF_ADDRESS,
     CONF_MODEL,
     CONF_SCAN_INTERVAL_MIN,
+    CONF_WRITE_MODE,
     DEFAULT_MODEL,
     DEFAULT_PIXEL_FORMAT,
     DEFAULT_RGB_OFF_MS,
     DEFAULT_RGB_ON_MS,
     DEFAULT_RGB_WORK_MS,
     DEFAULT_SCAN_INTERVAL_MIN,
+    DEFAULT_WRITE_MODE,
     DOMAIN,
     ERROR_CODES,
     MANUFACTURER_ID,
     MANUFACTURER_ID_ALT,
     MODELS,
+    WRITE_MODE_NO_RESPONSE,
+    WRITE_MODE_RESPONSE,
 )
 
 if TYPE_CHECKING:
@@ -59,6 +63,10 @@ class ESLState:
     error: int | None = None
     rssi: int | None = None
     last_advert: Any = None
+    # Raw advertisement and probe output, only consumed by diagnostics.
+    advert_raw: dict[str, str] = field(default_factory=dict)
+    advert_decoded: dict[str, Any] = field(default_factory=dict)
+    last_probe: dict[str, Any] | None = None
     last_connect_ok: bool = False
     last_error_message: str | None = None
 
@@ -108,6 +116,16 @@ class ESLDevice:
     # ------------------------------------------------------------------
     # Setup / teardown
     # ------------------------------------------------------------------
+
+    @property
+    def write_response(self) -> bool | None:
+        """ATT write type for commands, or None to let bleak decide."""
+        mode = self.entry.options.get(CONF_WRITE_MODE, DEFAULT_WRITE_MODE)
+        if mode == WRITE_MODE_RESPONSE:
+            return True
+        if mode == WRITE_MODE_NO_RESPONSE:
+            return False
+        return None
 
     def _poll_interval(self) -> timedelta | None:
         """Interval for the connectable poll, or None when disabled."""
@@ -172,6 +190,10 @@ class ESLDevice:
         """Merge advertisement data into the state. Returns True on change."""
         self.state.rssi = service_info.rssi
         self.state.last_advert = dt_util.utcnow()
+        self.state.advert_raw = {
+            f"0x{company_id:04X}": bytes(data).hex(" ")
+            for company_id, data in service_info.manufacturer_data.items()
+        }
 
         payload: bytes | None = None
         for company_id in (MANUFACTURER_ID, MANUFACTURER_ID_ALT):
@@ -182,6 +204,7 @@ class ESLDevice:
         if payload is None:
             return True
 
+        self.state.advert_decoded = protocol.describe_advertisement(payload)
         parsed = protocol.parse_advertisement(payload)
         if parsed is None:
             _LOGGER.debug(
@@ -282,7 +305,16 @@ class ESLDevice:
         work_ms = self.state.rgb_work_ms if work_ms is None else work_ms
 
         async with self.connection() as client:
-            await protocol.set_rgb(client, red, green, blue, on_ms, off_ms, work_ms)
+            await protocol.set_rgb(
+                client,
+                red,
+                green,
+                blue,
+                on_ms,
+                off_ms,
+                work_ms,
+                response=self.write_response,
+            )
 
         self.state.rgb_color = (red, green, blue)
         self.state.rgb_is_on = work_ms > 0 and any((red, green, blue))
@@ -301,7 +333,7 @@ class ESLDevice:
     async def async_clear_screen(self) -> None:
         """Clear the panel (section 3.7)."""
         async with self.connection() as client:
-            await protocol.clear_screen(client)
+            await protocol.clear_screen(client, response=self.write_response)
         _LOGGER.debug("%s screen cleared", self.address)
 
     async def async_send_image(self, request: ImageRequest) -> None:
@@ -315,6 +347,33 @@ class ESLDevice:
         async with self.connection() as client:
             await protocol.send_image(client, data, compressed=False)
         _LOGGER.debug("%s image uploaded (%d bytes)", self.address, len(data))
+
+    async def async_probe(self) -> dict[str, Any]:
+        """Connect and collect a full diagnostic report."""
+        ble_device = self._ble_device()
+        async with self._lock:
+            client = await establish_connection(
+                BleakClientWithServiceCache,
+                ble_device,
+                self.address,
+                timeout=CONNECT_TIMEOUT,
+            )
+            try:
+                report = await protocol.probe_device(client)
+            finally:
+                await client.disconnect()
+
+        report["address"] = self.address
+        report["model"] = self.model
+        report["write_mode_option"] = self.entry.options.get(
+            CONF_WRITE_MODE, DEFAULT_WRITE_MODE
+        )
+        report["advertisement"] = {
+            "raw_by_company_id": dict(self.state.advert_raw),
+            "decoded": dict(self.state.advert_decoded),
+        }
+        self.state.last_probe = report
+        return report
 
     async def async_refresh_multi(self, index_a: int, index_b: int) -> None:
         """Switch between stored multi-screen images (section 3.10)."""

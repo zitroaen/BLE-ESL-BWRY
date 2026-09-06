@@ -35,14 +35,20 @@
       "init": {
         "title": "ESL-Optionen",
         "data": {
-          "scan_interval_min": "Abfrageintervall (0 deaktiviert die Abfrage)"
+          "scan_interval_min": "Abfrageintervall (0 deaktiviert die Abfrage)",
+          "write_mode": "Schreibmodus für Kommandos"
+        },
+        "data_description": {
+          "write_mode": "Wie Kommandos über Bluetooth geschrieben werden. Probiere 'Ohne Bestätigung', wenn LED und Bildschirm löschen wirkungslos bleiben, die Sensoren aber aktualisieren."
         }
       }
     }
   },
   "entity": {
     "sensor": {
-      "battery_voltage": { "name": "Batteriespannung" },
+      "battery_voltage": {
+        "name": "Batteriespannung"
+      },
       "status": {
         "name": "Status",
         "state": {
@@ -56,20 +62,36 @@
           "unknown": "Unbekannt"
         }
       },
-      "signal_strength": { "name": "Signalstärke" },
-      "display_version": { "name": "Display-Version" },
-      "product_id": { "name": "Produkt-ID" }
+      "signal_strength": {
+        "name": "Signalstärke"
+      },
+      "display_version": {
+        "name": "Display-Version"
+      },
+      "product_id": {
+        "name": "Produkt-ID"
+      }
     },
     "button": {
-      "clear_screen": { "name": "Bildschirm löschen" }
+      "clear_screen": {
+        "name": "Bildschirm löschen"
+      }
     },
     "light": {
-      "rgb": { "name": "RGB-LED" }
+      "rgb": {
+        "name": "RGB-LED"
+      }
     },
     "number": {
-      "rgb_on_ms": { "name": "RGB-Einschaltzeit" },
-      "rgb_off_ms": { "name": "RGB-Ausschaltzeit" },
-      "rgb_work_ms": { "name": "RGB-Dauer" }
+      "rgb_on_ms": {
+        "name": "RGB-Einschaltzeit"
+      },
+      "rgb_off_ms": {
+        "name": "RGB-Ausschaltzeit"
+      },
+      "rgb_work_ms": {
+        "name": "RGB-Dauer"
+      }
     }
   },
   "services": {
@@ -77,10 +99,22 @@
       "name": "RGB setzen",
       "description": "Steuert die RGB-LED des Labels an (Kommando 0xA508).",
       "fields": {
-        "rgb_color": { "name": "Farbe", "description": "Anzuzeigende RGB-Farbe." },
-        "on_ms": { "name": "Einschaltzeit", "description": "Blink-Einschaltzeit in Millisekunden. Standard ist die Number-Entität RGB-Einschaltzeit." },
-        "off_ms": { "name": "Ausschaltzeit", "description": "Blink-Ausschaltzeit in Millisekunden. Standard ist die Number-Entität RGB-Ausschaltzeit." },
-        "work_ms": { "name": "Dauer", "description": "Gesamtlaufzeit in Millisekunden. Standard ist die Number-Entität RGB-Dauer." }
+        "rgb_color": {
+          "name": "Farbe",
+          "description": "Anzuzeigende RGB-Farbe."
+        },
+        "on_ms": {
+          "name": "Einschaltzeit",
+          "description": "Blink-Einschaltzeit in Millisekunden. Standard ist die Number-Entität RGB-Einschaltzeit."
+        },
+        "off_ms": {
+          "name": "Ausschaltzeit",
+          "description": "Blink-Ausschaltzeit in Millisekunden. Standard ist die Number-Entität RGB-Ausschaltzeit."
+        },
+        "work_ms": {
+          "name": "Dauer",
+          "description": "Gesamtlaufzeit in Millisekunden. Standard ist die Number-Entität RGB-Dauer."
+        }
       }
     },
     "clear_screen": {
@@ -91,10 +125,35 @@
       "name": "Bild setzen",
       "description": "Rendert eine Bilddatei und überträgt sie auf das Panel. Experimentell: Das Pixelformat ist vom Hersteller nicht dokumentiert.",
       "fields": {
-        "path": { "name": "Dateipfad", "description": "Pfad zum Bild. Muss in einem erlaubten Verzeichnis liegen." },
-        "rotate": { "name": "Drehung", "description": "Bild vor dem Einpassen drehen." },
-        "invert": { "name": "Invertieren", "description": "Schwarz und Weiß bei 1-Bit-Panels tauschen." },
-        "dither": { "name": "Dithering", "description": "Floyd-Steinberg-Dithering anwenden." }
+        "path": {
+          "name": "Dateipfad",
+          "description": "Pfad zum Bild. Muss in einem erlaubten Verzeichnis liegen."
+        },
+        "rotate": {
+          "name": "Drehung",
+          "description": "Bild vor dem Einpassen drehen."
+        },
+        "invert": {
+          "name": "Invertieren",
+          "description": "Schwarz und Weiß bei 1-Bit-Panels tauschen."
+        },
+        "dither": {
+          "name": "Dithering",
+          "description": "Floyd-Steinberg-Dithering anwenden."
+        }
+      }
+    },
+    "debug_probe": {
+      "name": "Diagnose-Probe",
+      "description": "Verbindet sich, listet die GATT-Tabelle auf, liest alle Charakteristiken und zeigt das Ergebnis als Benachrichtigung. Für die Fehlersuche."
+    }
+  },
+  "selector": {
+    "write_mode": {
+      "options": {
+        "auto": "Automatisch",
+        "with_response": "Mit Bestätigung",
+        "without_response": "Ohne Bestätigung"
       }
     }
   }
