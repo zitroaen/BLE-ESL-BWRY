@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
 import voluptuous as vol
+from homeassistant.components import persistent_notification
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
@@ -19,6 +21,7 @@ from .const import (
     RGB_WORK_MS_MAX,
     RGB_WORK_MS_MIN,
     SERVICE_CLEAR_SCREEN,
+    SERVICE_COMMAND_SWEEP,
     SERVICE_DEBUG_COMMAND,
     SERVICE_DEBUG_PROBE,
     SERVICE_SEND_TEST_PATTERN,
@@ -29,6 +32,7 @@ from .device import ESLDevice
 from .imaging import BIT_ORDERS, ENCODINGS, ImageRequest
 from .patterns import DEFAULT_PATTERN, PATTERNS
 from .probe import async_probe_and_notify
+from .protocol import command_variants
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,6 +64,16 @@ SET_RGB_SCHEMA = _DEVICE_SELECTOR.extend(
 
 CLEAR_SCREEN_SCHEMA = _DEVICE_SELECTOR
 DEBUG_PROBE_SCHEMA = _DEVICE_SELECTOR
+
+COMMAND_SWEEP_SCHEMA = _DEVICE_SELECTOR.extend(
+    {
+        vol.Optional("opcode", default="A504"): cv.string,
+        vol.Optional("payloads"): vol.All(cv.ensure_list, [cv.string]),
+        vol.Optional("settle", default=1.5): vol.All(
+            vol.Coerce(float), vol.Range(0.1, 10.0)
+        ),
+    }
+)
 
 DEBUG_COMMAND_SCHEMA = _DEVICE_SELECTOR.extend(
     {
@@ -178,6 +192,40 @@ def async_setup_services(hass: HomeAssistant) -> None:
             **source,
         )
 
+    async def _command_sweep(call: ServiceCall) -> None:
+        """Try several command encodings in one wake-up and report the deltas."""
+        if raw_payloads := call.data.get("payloads"):
+            try:
+                payloads = [
+                    bytes.fromhex(item.replace(" ", "").replace(":", ""))
+                    for item in raw_payloads
+                ]
+            except ValueError as err:
+                raise ServiceValidationError(f"payloads must be hex: {err}") from err
+        else:
+            try:
+                opcode = int(call.data["opcode"].replace("0x", ""), 16)
+            except ValueError as err:
+                raise ServiceValidationError(
+                    f"opcode must be hex, got {call.data['opcode']!r}"
+                ) from err
+            payloads = command_variants(opcode)
+
+        if not payloads:
+            raise ServiceValidationError("nothing to send")
+
+        for device in _resolve_devices(hass, call):
+            report = await device.async_command_sweep(
+                payloads, settle=call.data["settle"]
+            )
+            pretty = json.dumps(report, indent=2, default=str)
+            persistent_notification.async_create(
+                hass,
+                "```json\n" + pretty + "\n```",
+                title=f"ESL command sweep {device.address}",
+                notification_id=f"{DOMAIN}_sweep_{device.address}",
+            )
+
     async def _set_image(call: ServiceCall) -> None:
         path = call.data["path"]
         if not hass.config.is_allowed_path(path):
@@ -211,6 +259,9 @@ def async_setup_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN, SERVICE_DEBUG_COMMAND, _debug_command, schema=DEBUG_COMMAND_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_COMMAND_SWEEP, _command_sweep, schema=COMMAND_SWEEP_SCHEMA
     )
     hass.services.async_register(
         DOMAIN,

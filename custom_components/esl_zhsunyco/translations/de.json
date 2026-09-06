@@ -212,6 +212,24 @@
           "description": "Floyd-Steinberg-Dithering anwenden."
         }
       }
+    },
+    "debug_command_sweep": {
+      "name": "Kommando-Varianten testen",
+      "description": "Sendet mehrere Kodierungen eines Kommandos in einer einzigen Verbindung und meldet, wie die Status-Charakteristik jeweils reagiert hat. Das Aufwecken des Labels ist der langsame Teil, deshalb werden alle Kandidaten auf einmal getestet.",
+      "fields": {
+        "opcode": {
+          "name": "Opcode",
+          "description": "Zu testendes Kommando als Hex. Die Varianten werden daraus abgeleitet: Big Endian, Little Endian und mit angehängten Längenbytes."
+        },
+        "payloads": {
+          "name": "Nutzdaten",
+          "description": "Explizite Liste von Hex-Payloads. Überschreibt den Opcode."
+        },
+        "settle": {
+          "name": "Wartezeit",
+          "description": "Sekunden nach jedem Schreibvorgang, bevor der Status zurückgelesen wird."
+        }
+      }
     }
   },
   "selector": {

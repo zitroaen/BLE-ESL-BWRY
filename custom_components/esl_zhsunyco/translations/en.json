@@ -212,6 +212,24 @@
           "description": "Apply Floyd-Steinberg dithering."
         }
       }
+    },
+    "debug_command_sweep": {
+      "name": "Debug command sweep",
+      "description": "Sends several encodings of one command in a single connection and reports how the status characteristic reacted to each. Waking the label is the slow part, so this tests every candidate in one go.",
+      "fields": {
+        "opcode": {
+          "name": "Opcode",
+          "description": "Command to try, as hex. Variants are derived from it: big endian, little endian, and with trailing length bytes."
+        },
+        "payloads": {
+          "name": "Payloads",
+          "description": "Explicit list of hex payloads. Overrides opcode."
+        },
+        "settle": {
+          "name": "Settle time",
+          "description": "Seconds to wait after each write before reading the status back."
+        }
+      }
     }
   },
   "selector": {

@@ -35,6 +35,7 @@ from .const import (
     MANUFACTURER_ID,
     MANUFACTURER_ID_ALT,
     MODELS,
+    UUID_STATUS,
     WRITE_MODE_NO_RESPONSE,
     WRITE_MODE_RESPONSE,
 )
@@ -84,6 +85,9 @@ class ESLState:
     rgb_work_ms: int = DEFAULT_RGB_WORK_MS
     rgb_color: tuple[int, int, int] = field(default=(255, 0, 0))
     rgb_is_on: bool = False
+
+    # What the last command did, so a button press is not a silent event.
+    last_command: dict[str, Any] | None = None
 
     @property
     def error_text(self) -> str | None:
@@ -407,16 +411,77 @@ class ESLDevice:
         Only for working out an encoding the document leaves open; nothing
         in the integration uses this path.
         """
-        async with self.connection() as client:
-            await protocol.send_command(client, payload, response=expect_response)
-        _LOGGER.warning(
-            "Raw command sent to %s: %s (response=%s)",
-            self.address,
-            payload.hex(" "),
-            expect_response,
-        )
+        await self.async_command_sweep([payload], response=expect_response)
 
-    async def async_probe(self) -> dict[str, Any]:
+    async def async_command_sweep(
+        self,
+        payloads: list[bytes],
+        *,
+        response: bool | None = None,
+        settle: float = 1.5,
+    ) -> dict[str, Any]:
+        """Send several command encodings in one connection and watch status.
+
+        Waking the label is the expensive part, so every candidate is tried
+        inside a single connection. The status characteristic is the label's
+        own feedback: if busy or the error code never move, the command was
+        not understood. A disconnect right after one payload is a signal in
+        itself, since the label drops writes it rejects.
+        """
+        if response is None:
+            response = self.write_response
+
+        results: list[dict[str, Any]] = []
+        report: dict[str, Any] = {"address": self.address, "results": results}
+
+        async def read_status_safe(client) -> dict[str, Any]:
+            try:
+                raw = bytes(await client.read_gatt_char(UUID_STATUS))
+            except Exception as err:  # noqa: BLE001 - part of the observation
+                return {"error": f"{type(err).__name__}: {err}"}
+            return {
+                "raw": raw[:8].hex(" "),
+                "busy": bool(raw[0]) if raw else None,
+                "error_code": raw[1] if len(raw) > 1 else None,
+            }
+
+        try:
+            async with self.connection() as client:
+                for payload in payloads:
+                    entry: dict[str, Any] = {"payload": payload.hex(" ")}
+                    entry["status_before"] = await read_status_safe(client)
+                    try:
+                        await protocol.send_command(client, payload, response=response)
+                        entry["write"] = "ok"
+                    except Exception as err:  # noqa: BLE001 - report, keep going
+                        entry["write"] = f"{type(err).__name__}: {err}"
+
+                    await asyncio.sleep(settle)
+                    entry["status_after"] = await read_status_safe(client)
+                    entry["status_changed"] = (
+                        entry["status_before"] != entry["status_after"]
+                    )
+                    entry["connected_after"] = bool(
+                        getattr(client, "is_connected", True)
+                    )
+                    results.append(entry)
+
+                    if not entry["connected_after"]:
+                        entry["note"] = (
+                            "label dropped the connection after this payload"
+                        )
+                        break
+        except Exception as err:  # noqa: BLE001 - the report is the deliverable
+            report["error"] = f"{type(err).__name__}: {err}"
+
+        report["any_status_changed"] = any(
+            item.get("status_changed") for item in results
+        )
+        self.state.last_command = report
+        _LOGGER.warning("ESL command sweep %s: %s", self.address, report)
+        return report
+
+    async def async_probe(self, wait: int = ADVERTISEMENT_WAIT_S) -> dict[str, Any]:
         """Collect a full diagnostic report.
 
         Never raises: a connection that fails is the very thing we want to
@@ -424,7 +489,7 @@ class ESLDevice:
         """
         report: dict[str, Any] = {}
         try:
-            ble_device = await self._async_wait_for_connectable()
+            ble_device = await self._async_wait_for_connectable(wait)
             async with self._lock:
                 client = await establish_connection(
                     BleakClientWithServiceCache,

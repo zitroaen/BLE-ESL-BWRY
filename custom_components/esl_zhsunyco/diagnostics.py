@@ -17,8 +17,11 @@ _LOGGER = logging.getLogger(__name__)
 
 TO_REDACT = {"address"}
 
-# A probe needs a connection; keep it well inside any frontend timeout.
-PROBE_TIMEOUT = 25.0
+# A probe needs the label to be awake. The wait budget is passed into the
+# probe so it reports being asleep cleanly, instead of being cut off from
+# outside and leaving a bare timeout; the outer guard is only a backstop.
+PROBE_WAIT_S = 20
+PROBE_TIMEOUT = PROBE_WAIT_S + 15.0
 
 
 async def async_get_config_entry_diagnostics(
@@ -34,7 +37,7 @@ async def async_get_config_entry_diagnostics(
     if state.last_probe is None:
         try:
             async with asyncio.timeout(PROBE_TIMEOUT):
-                await device.async_probe()
+                await device.async_probe(wait=PROBE_WAIT_S)
         except TimeoutError:
             _LOGGER.warning("Probe for diagnostics timed out after %ss", PROBE_TIMEOUT)
             state.last_probe = {"error": f"probe timed out after {PROBE_TIMEOUT}s"}
@@ -80,5 +83,6 @@ async def async_get_config_entry_diagnostics(
             "decoded": dict(state.advert_decoded),
         },
         "battery_candidate_meanings": BATTERY_CANDIDATES,
+        "last_command": state.last_command,
         "last_probe": state.last_probe,
     }

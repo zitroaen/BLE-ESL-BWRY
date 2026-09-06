@@ -290,6 +290,37 @@ Diagnose herunterladen** eine JSON-Datei mit dem rohen Advertisement, der
 Feld-für-Feld-Zerlegung und den Batteriewerten unter allen plausiblen
 Dekodierregeln.
 
+### Das Label reagiert nicht auf Kommandos
+
+Ein Schreibvorgang auf die Command-Charakteristik meldet keinen Fehler,
+selbst wenn das Label ihn ignoriert. Die **Status-Charakteristik ist der
+Rückkanal**: Ändert sich `busy` oder `error_code` nach einem Kommando nicht,
+wurde es nicht verstanden.
+
+Genau das prüft der Sweep — und zwar alle Kandidaten in **einer** Verbindung,
+weil das Aufwecken des Labels der langsame Teil ist:
+
+```yaml
+action: esl_zhsunyco.debug_command_sweep
+target:
+  device_id: <dein Label>
+data:
+  opcode: "A504"     # Bildschirm löschen
+```
+
+Getestet werden daraus abgeleitet `a5 04`, `04 a5`, `a5 04 00`,
+`a5 04 00 00` und `04 a5 00`. Das Ergebnis kommt als Benachrichtigung:
+
+- `status_changed: true` bei einer Variante → **diese Kodierung ist richtig**
+- `any_status_changed: false` → keine Variante wurde verstanden
+- `connected_after: false` → das Label hat nach dieser Variante aufgelegt,
+  was ebenfalls eine Reaktion ist
+
+Eigene Kandidaten gehen auch: `payloads: ["a5 04", "04 a5 00 00"]`.
+
+Das Ergebnis des letzten Kommandos steht außerdem als `last_command` in der
+Diagnose-Datei.
+
 ### Kommandos scheitern mit „out of connection slots"
 
 Ein ESL schläft zwischen seinen Advertisements — Pausen von mehreren Minuten

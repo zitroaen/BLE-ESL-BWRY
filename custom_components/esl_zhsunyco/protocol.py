@@ -289,6 +289,24 @@ def parse_advertisement(payload: bytes) -> tuple[VersionInfo, int] | None:
     )
 
 
+def command_variants(opcode: int = 0xA504) -> list[bytes]:
+    """Plausible wire encodings of a two byte command.
+
+    The document writes commands as "0xA504" without saying how the two
+    bytes reach the wire, and this device is already known to mix byte
+    orders between its advertisement and its characteristics. These are the
+    forms worth trying; the status characteristic says which one lands.
+    """
+    high, low = (opcode >> 8) & 0xFF, opcode & 0xFF
+    return [
+        bytes((high, low)),  # as written, big endian
+        bytes((low, high)),  # little endian
+        bytes((high, low, 0x00)),  # with a zero length byte
+        bytes((high, low, 0x00, 0x00)),  # with a zero length word
+        bytes((low, high, 0x00)),
+    ]
+
+
 def format_version(value: int) -> str:
     """Render a 16 bit version word as ``major.minor``."""
     return f"{value >> 8}.{value & 0xFF}"
