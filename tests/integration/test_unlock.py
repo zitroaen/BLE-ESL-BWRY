@@ -51,7 +51,9 @@ class FakeLabel:
             return CHALLENGE
         if uuid == UUID_STATUS:
             busy, self.busy = self.busy, False
-            return bytes((1 if busy else 0, 0)) + bytes(30)
+            # Measured on hardware: bit 0 is BUSY, bits 1|2 mean still locked.
+            state = (0x01 if busy else 0x00) | (0x00 if self.unlocked else 0x06)
+            return bytes((state, 0)) + bytes(30)
         raise AssertionError(f"unexpected read of {uuid}")
 
     async def write_gatt_char(self, uuid, data, response=None):
@@ -118,7 +120,7 @@ async def test_sweep_finds_the_documented_encrypt_variant(
     report = await _sweep(hass, device, FakeLabel(accepts="encrypt"))
 
     assert report["working_variant"] == "encrypt"
-    assert "reacted to the 'encrypt' unlock" in report["conclusion"]
+    assert report["results"][0]["unlock_accepted"] is True
 
 
 async def test_sweep_finds_decrypt_when_the_document_is_wrong(
@@ -130,8 +132,8 @@ async def test_sweep_finds_decrypt_when_the_document_is_wrong(
 
     assert report["working_variant"] == "decrypt"
     by_variant = {item["variant"]: item for item in report["results"]}
-    assert by_variant["encrypt"]["label_reacted"] is False
-    assert by_variant["decrypt"]["label_reacted"] is True
+    assert by_variant["encrypt"]["unlock_accepted"] is False
+    assert by_variant["decrypt"]["unlock_accepted"] is True
 
 
 async def test_sweep_reports_when_nothing_unlocks(
@@ -142,7 +144,7 @@ async def test_sweep_reports_when_nothing_unlocks(
     report = await _sweep(hass, device, FakeLabel(accepts=None))
 
     assert report["working_variant"] is None
-    assert "no unlock variant" in report["conclusion"]
+    assert "no unlock variant was accepted" in report["conclusion"]
     assert len(report["results"]) == len(UNLOCK_VARIANTS)
 
 
@@ -207,3 +209,65 @@ def test_variants_are_distinct_and_use_the_vendor_key():
     dec = Cipher(algorithms.AES(AES_KEY), modes.ECB()).decryptor()
     assert responses["decrypt"] == dec.update(CHALLENGE) + dec.finalize()
     assert responses["encrypt"] != responses["decrypt"]
+
+
+async def test_sweep_separates_the_unlock_from_the_command(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """The real hardware case: the unlock is accepted, the command is not.
+
+    Judging the unlock by whether a command worked would have reported a
+    correct handshake as broken, which is what happened before the status
+    byte turned out to carry a locked indicator.
+    """
+    device = await _setup(hass, config_entry)
+
+    class SilentLabel(FakeLabel):
+        async def write_gatt_char(self, uuid, data, response=None):
+            if uuid == UUID_SECURITY:
+                self.unlocked = self.accepts is not None and bytes(data) == _expected(
+                    self.accepts
+                )
+                return
+            self.commands.append(bytes(data))
+            # Unlocked, but the command encoding is wrong: accepted and
+            # ignored, and crucially the link survives.
+            if not self.unlocked:
+                self.is_connected = False
+
+    report = await _sweep(hass, device, SilentLabel(accepts="encrypt"))
+
+    assert report["working_variant"] == "encrypt"
+    assert report["command_understood"] is False
+    assert "remaining unknown is its encoding" in report["conclusion"]
+
+    entry = report["results"][0]
+    assert entry["unlock_accepted"] is True
+    assert entry["label_reacted"] is False
+    assert entry["connected_after_command"] is True
+
+
+async def test_locked_status_byte_is_not_reported_as_busy(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """0x06 means locked, not busy; reading the whole byte as a flag lied."""
+    from custom_components.esl_zhsunyco.device import _read_status
+
+    class Status:
+        def __init__(self, state):
+            self.state = state
+
+        async def read_gatt_char(self, uuid):
+            return bytes((self.state, 0)) + bytes(30)
+
+    locked = await _read_status(Status(0x06))
+    assert locked["busy"] is False
+    assert locked["looks_locked"] is True
+
+    unlocked = await _read_status(Status(0x00))
+    assert unlocked["busy"] is False
+    assert unlocked["looks_locked"] is False
+
+    working = await _read_status(Status(0x01))
+    assert working["busy"] is True
+    assert working["looks_locked"] is False

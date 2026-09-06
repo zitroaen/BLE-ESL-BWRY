@@ -83,6 +83,12 @@ SEED_INTERVAL = timedelta(minutes=5)
 # advertise notify, and some firmwares only start acting once subscribed.
 POST_CONNECT_SETTLE_S = 1.0
 
+# Status byte 0. Bit 0 is the documented BUSY flag; bits 1 and 2 are not in
+# the document at all and were found by measurement: they are set while the
+# label is locked and clear once it accepts the unlock.
+STATUS_BUSY_BIT = 0x01
+STATUS_LOCKED_BITS = 0x06
+
 STATUS_WATCH_S = 8.0
 STATUS_POLL_S = 0.5
 # Belt and braces so a misconfigured interval cannot spin.
@@ -120,6 +126,9 @@ class ESLState:
     last_command: dict[str, Any] | None = None
     # Anything the label pushed at us; the document does not mention these.
     notifications: list[dict[str, Any]] = field(default_factory=list)
+    # Whether the label accepted the unlock on the current connection.
+    unlock_verified: bool | None = None
+    last_unlock_status: dict[str, Any] | None = None
 
     @property
     def error_text(self) -> str | None:
@@ -714,6 +723,26 @@ class ESLDevice:
         """Which unlock computation to use; the document leaves it ambiguous."""
         return str(self.entry.options.get(CONF_UNLOCK_VARIANT, DEFAULT_UNLOCK_VARIANT))
 
+    async def _async_verify_unlock(self, client) -> None:
+        """Check that the label accepted the unlock, and say so if not.
+
+        The status byte carries an undocumented locked indicator: 0x00 once
+        the unlock is accepted, 0x06 while it is not. Without this check a
+        rejected unlock is silent, and the first command write then makes the
+        label hang up, which surfaces much later as a missing characteristic.
+        """
+        status = await _read_status(client)
+        self.state.unlock_verified = not status.get("looks_locked", False)
+        self.state.last_unlock_status = status
+        if not self.state.unlock_verified:
+            _LOGGER.warning(
+                "%s: the label rejected the '%s' unlock (status %s). Commands "
+                "will be ignored and the link dropped on the first write.",
+                self.address,
+                self.unlock_variant,
+                status.get("raw"),
+            )
+
     async def _async_subscribe(self, client) -> None:
         """Subscribe to the status characteristic, if the label offers notify.
 
@@ -790,8 +819,14 @@ class ESLDevice:
 
                     await client.write_gatt_char(UUID_SECURITY, token)
                     await asyncio.sleep(settle)
-                    entry["status_after_unlock"] = await _read_status(client)
+                    status = await _read_status(client)
+                    entry["status_after_unlock"] = status
                     entry["connected_after_unlock"] = bool(client.is_connected)
+                    # The decisive signal: the label reports 0x00 in the
+                    # status byte once it accepts the unlock, 0x06 while it
+                    # does not. This does not depend on the command encoding
+                    # being right as well.
+                    entry["unlock_accepted"] = not status.get("looks_locked", True)
 
                     await protocol.send_command(
                         client, probe_command, response=self.write_response
@@ -810,22 +845,33 @@ class ESLDevice:
                 entry["note"] = "the label dropped the link after the command"
             results.append(entry)
 
-            if entry.get("label_reacted"):
+            if entry.get("unlock_accepted"):
                 break
 
             # Make sure the next variant starts from a clean connection.
             await self._async_disconnect()
 
         winner = next(
+            (item["variant"] for item in results if item.get("unlock_accepted")), None
+        )
+        reacted = next(
             (item["variant"] for item in results if item.get("label_reacted")), None
         )
         report["working_variant"] = winner
+        report["command_understood"] = reacted is not None
         report["notifications"] = list(self.state.notifications)
-        report["conclusion"] = (
-            f"the label reacted to the '{winner}' unlock"
-            if winner
-            else "no unlock variant made the label react"
-        )
+        if winner and reacted:
+            report["conclusion"] = (
+                f"'{winner}' unlocks the label and the command worked"
+            )
+        elif winner:
+            report["conclusion"] = (
+                f"'{winner}' unlocks the label: the status byte clears and the link "
+                "survives the write. The command itself was not understood, so the "
+                "remaining unknown is its encoding, not the handshake."
+            )
+        else:
+            report["conclusion"] = "no unlock variant was accepted by the label"
         self.state.last_command = report
         _LOGGER.warning("ESL unlock sweep %s: %s", self.address, report)
         return report
@@ -966,9 +1012,22 @@ async def _read_status(client: BleakClientWithServiceCache) -> dict[str, Any]:
         raw = bytes(await client.read_gatt_char(UUID_STATUS))
     except Exception as err:  # noqa: BLE001 - part of the observation
         return {"error": f"{type(err).__name__}: {err}"}
+    if not raw:
+        return {"raw": "", "busy": None, "error_code": None}
+
+    state = raw[0]
     return {
         "raw": raw[:4].hex(" "),
-        "busy": bool(raw[0]) if raw else None,
+        "state": state,
+        # The document defines byte 0 as BUSY with "1: busy, 0: no busy", so
+        # only bit 0 is the busy flag. Reading the whole byte as a boolean
+        # made a locked label look busy.
+        "busy": bool(state & STATUS_BUSY_BIT),
+        # Measured, not documented: a label that accepted the unlock reports
+        # 0x00 here, one that rejected it reports 0x06. Established by running
+        # every unlock variant and comparing, the wrong ones additionally
+        # dropping the link on the next write as the document describes.
+        "looks_locked": bool(state & STATUS_LOCKED_BITS),
         "error_code": raw[1] if len(raw) > 1 else None,
     }
 
@@ -1101,6 +1160,7 @@ class _ESLConnection:
 
             if self._unlock:
                 await protocol.unlock(client, device.unlock_variant)
+                await device._async_verify_unlock(client)
             device._client = client
             return client
         except BaseException:

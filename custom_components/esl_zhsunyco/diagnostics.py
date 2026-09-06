@@ -62,6 +62,8 @@ async def async_get_config_entry_diagnostics(
             "connection_held_open": device.connected,
             "linger_seconds": device.linger_seconds,
             "unlock_variant": device.unlock_variant,
+            "unlock_verified": state.unlock_verified,
+            "last_unlock_status": state.last_unlock_status,
             "notifications": list(state.notifications),
             "last_error_message": state.last_error_message,
         },

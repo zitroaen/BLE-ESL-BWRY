@@ -157,6 +157,39 @@ gebündelt, damit sie leicht korrigierbar sind:
 - **Panel-Auflösungen** in `const.py` stammen nicht aus der Doku und können
   je nach Gerät abweichen.
 
+## Der AES-Handshake ist bestätigt
+
+Ein Unlock-Sweep über alle sechs Varianten hat es entschieden — **`encrypt`
+ist korrekt**, also genau das, was die Doku beschreibt:
+
+| Variante | Statusbyte 0 nach Unlock | Verbindung überlebt Kommando |
+|---|---|---|
+| **`encrypt`** | **`0x00`** | **ja** |
+| decrypt | `0x06` | nein |
+| encrypt_reversed | `0x06` | nein |
+| decrypt_reversed | `0x06` | nein |
+| encrypt_then_reverse | `0x06` | nein |
+| echo | `0x06` | nein |
+
+Die fünf falschen Varianten lösen exakt das aus, was die Doku für ein
+gesperrtes Label beschreibt: Das Gerät legt beim nächsten Write auf.
+
+### Das Statusbyte trägt einen undokumentierten Sperr-Indikator
+
+Die Doku definiert Byte 0 als BUSY („1: busy, 0: no busy"). Gemessen wurde:
+
+- `0x00` → Unlock akzeptiert
+- `0x06` → Unlock abgelehnt
+
+Bit 0 ist also der dokumentierte BUSY-Flag, **Bits 1 und 2 zeigen den
+Sperrzustand** — das steht nirgends in der Doku. Die Integration prüft das
+seit 0.15.0 direkt nach jedem Unlock und warnt im Log, statt den Fehler
+erst beim ersten Kommando als „Characteristic not found" auftauchen zu
+lassen. In der Diagnose steht er als `unlock_verified`.
+
+Vorher wurde `0x06` fälschlich als „busy" gemeldet, weil das ganze Byte als
+Boolean gelesen wurde.
+
 ## Bestätigt gegen echte Hardware
 
 Ein vollständiger Probe-Lauf an einem BLE-35BWRY hat folgendes belegt.
