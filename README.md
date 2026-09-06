@@ -1,92 +1,96 @@
-# Zhsunyco ESL — BLE E-Ink-Label für Home Assistant
+# Zhsunyco ESL — BLE e-ink label for Home Assistant
 
 [![Validate](https://github.com/zitroaen/BLE-ESL-BWRY/actions/workflows/validate.yml/badge.svg)](https://github.com/zitroaen/BLE-ESL-BWRY/actions/workflows/validate.yml)
 [![hacs](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 
-Home-Assistant-Integration für BLE-E-Ink-Preisschilder (Electronic Shelf Labels)
-mit Wolink/Zhsunyco-Firmware, z. B. `BLE-35BWRY`.
+Home Assistant integration for BLE e-ink shelf labels running Wolink /
+Zhsunyco firmware, such as the `BLE-35BWRY`.
 
-Die Implementierung folgt dem Herstellerdokument **„BLE Display API" Rev. 1.5**.
-Alle Kommandos und Charakteristiken sind im Code mit der jeweiligen
-Abschnittsnummer kommentiert.
+It follows the vendor document **"BLE Display API" rev 1.5**, and every
+command and characteristic in the code carries the section number it comes
+from. Where the document is silent or wrong, the code says what was measured
+on hardware instead — see
+[`docs/hardware-verified-findings.md`](docs/hardware-verified-findings.md).
 
-## Funktionsumfang
+## What works
 
-| Funktion | Doku | Status |
+| Feature | Document | Status |
 |---|---|---|
-| Security-Unlock (Challenge/Response, AES-128-ECB) | Abschn. 2 | ✅ |
-| Batteriestand passiv aus dem Advertisement | Abschn. 1.2 | ✅ |
-| Version, Batterie, Status über eigene Charakteristiken | Abschn. IV–VI | ✅ |
-| RGB-LED `0xA508` | Abschn. 3.8 | ✅ |
-| Bildschirm löschen `0xA504` | Abschn. 3.7 | ✅ |
-| Bildupload `0xA500` / Refresh `0xA501` | Abschn. 3.1–3.2 | ✅ |
-| Refresh komprimiert `0xA502` | Abschn. 3.3 | ⚠️ implementiert, Kompression ungetestet |
-| Testbilder ohne Bilddatei | – | ✅ |
-| Panel-Vorschau als `image`-Entität | – | ✅ |
-| Multi-Screen `0xA503` / `0xA509` | Abschn. 3.9–3.10 | ⚠️ implementiert, ungetestet |
-| OTA `0xA505`–`0xA507` | Abschn. 3.4–3.6 | ❌ bewusst nicht implementiert |
+| Security unlock (challenge/response, AES-128-ECB) | sec. 2 | ✅ verified on hardware |
+| Battery level, passively from the advertisement | sec. 1.2 | ✅ verified on hardware |
+| Version, battery and status characteristics | sec. IV–VI | ✅ verified on hardware |
+| Image upload `0xA500` / refresh `0xA501` | sec. 3.1–3.2 | ✅ verified on hardware |
+| Clear screen `0xA504` | sec. 3.7 | ✅ verified on hardware |
+| RGB LED `0xA508` | sec. 3.8 | ✅ verified on hardware |
+| Test patterns, no image file needed | – | ✅ |
+| Panel preview as an `image` entity | – | ✅ |
+| Compressed refresh `0xA502` | sec. 3.3 | ❌ the compression format is undocumented |
+| Multi-screen `0xA503` / `0xA509` | sec. 3.9–3.10 | ❌ not implemented |
+| OTA `0xA505`–`0xA507` | sec. 3.4–3.6 | ❌ deliberately not implemented |
 
-Unterstützt Bluetooth-Adapter **und ESPHome-Bluetooth-Proxies** — Verbindungen
-laufen über `bluetooth` + `bleak-retry-connector`, nicht über direktes `bleak`.
+Works with local Bluetooth adapters **and ESPHome Bluetooth proxies**:
+connections go through Home Assistant's `bluetooth` helpers and
+`bleak-retry-connector`, not through `bleak` directly. Everything marked
+verified above was measured through a proxy as well as a direct adapter.
 
-## Installation über HACS
+## Installation through HACS
 
 1. In Home Assistant: **HACS → ⋮ → Custom repositories**
-2. Repository `https://github.com/zitroaen/BLE-ESL-BWRY`, Kategorie **Integration**
-3. Hinzufügen, dann **Zhsunyco ESL** herunterladen
-4. Home Assistant neu starten
-5. **Einstellungen → Geräte & Dienste → Integration hinzufügen → Zhsunyco ESL**
+2. Repository `https://github.com/zitroaen/BLE-ESL-BWRY`, category **Integration**
+3. Add it, then download **Zhsunyco ESL**
+4. Restart Home Assistant
+5. **Settings → Devices & services → Add integration → Zhsunyco ESL**
 
-Updates laufen danach normal über HACS. Zum Veröffentlichen einer neuen
-Version einen Git-Tag setzen, der zur `version` in `manifest.json` passt:
+Updates then arrive through HACS as usual. To publish a release, push a git
+tag matching the `version` in `manifest.json`:
 
 ```bash
-git tag v0.2.0 && git push origin v0.2.0
+git tag v0.23.0 && git push origin v0.23.0
 ```
 
-### Upgrade vom Prototyp
+### Manual installation
 
-Ein Config-Entry, der noch mit der Vorgängerversion angelegt wurde (Titel im
-Format `ESL 66:66:17:40:27:77 (BLE-35BWRY)`), wird beim ersten Start
-**automatisch migriert** — Adresse, Modell und das alte
-`battery_scan_interval` im Format `HH:MM:SS` werden übernommen (`12:00:00`
-wird zu 720 Minuten). Löschen und neu einrichten ist nicht nötig.
+Copy `custom_components/esl_zhsunyco/` into `<config>/custom_components/`
+and restart Home Assistant.
 
-### Manuelle Installation
+### Upgrading from the pre-HACS prototype
 
-`custom_components/esl_zhsunyco/` nach `<config>/custom_components/` kopieren
-und Home Assistant neu starten.
+A config entry created by the earlier prototype (titled like
+`ESL 66:66:17:40:27:77 (BLE-35BWRY)`) is **migrated automatically** on the
+first start. The address, the model and the old `battery_scan_interval` in
+`HH:MM:SS` form are carried over (`12:00:00` becomes 720 minutes). There is
+no need to delete and re-add the device.
 
-## Einrichtung
+## Setup
 
-Labels, die ein passendes Manufacturer-Advertisement senden, werden von Home
-Assistant **automatisch erkannt**. Alternativ manuell hinzufügen — die Adresse
-beginnt laut Doku (Abschn. 1.1) mit den festen Bytes `66:66`, z. B.
+Labels that broadcast a matching manufacturer advertisement are **discovered
+automatically**. You can also add one by hand — per section 1.1 of the
+document the address always starts with the fixed bytes `66:66`, for example
 `66:66:54:20:00:55`.
 
-Das **Abfrageintervall** steuert nur den verbindungsbasierten Poll für Status
-und Version. Batteriestand und Versionen kommen passiv aus dem Advertisement,
-deshalb ist ein langes Intervall sinnvoll. `0` deaktiviert den Poll ganz.
+The **scan interval** only controls the connection-based poll for status and
+version. Battery and version numbers arrive passively in the advertisement,
+so a long interval is fine. `0` disables the poll entirely.
 
-## Entitäten
+## Entities
 
-| Entität | Typ | Bemerkung |
+| Entity | Type | Note |
 |---|---|---|
-| Batteriespannung | Sensor | aus dem Advertisement, Verbindung nicht nötig |
-| Status | Sensor | BUSY/ERR laut Abschn. VI, inkl. Klartext-Fehlercodes |
-| Signalstärke, Display-Version, Produkt-ID | Sensor | Diagnose, standardmäßig deaktiviert |
-| RGB-LED | Light | Farbe + Blinkmuster |
-| RGB-Ein-/Ausschaltzeit, RGB-Dauer | Number | Blinkparameter für die LED |
-| Bildschirm löschen | Button | Kommando `0xA504` |
+| Battery voltage | Sensor | from the advertisement, no connection needed |
+| Status | Sensor | BUSY/ERR per section VI, with readable error codes |
+| Panel | Image | what was last put on the screen |
+| Signal strength, display version, product ID | Sensor | diagnostic, disabled by default |
+| RGB LED | Light | colour and blink pattern |
+| RGB on/off time, RGB duration | Number | blink parameters for the LED |
+| Clear screen, test pattern, diagnostic probe | Button | one press each |
 
-## Dienste
+## Services
 
 ```yaml
-# LED rot blinken lassen
+# Blink the LED red
 action: esl_zhsunyco.set_rgb
-target:
-  device_id: <dein Label>
 data:
+  device_id: <your label>
   rgb_color: [255, 0, 0]
   on_ms: 500
   off_ms: 500
@@ -95,48 +99,25 @@ data:
 
 ```yaml
 action: esl_zhsunyco.clear_screen
-target:
-  device_id: <dein Label>
-```
-
-```yaml
-# Experimentell
-action: esl_zhsunyco.set_image
-target:
-  device_id: <dein Label>
 data:
-  path: /config/www/label.png
-  rotate: 0
-  dither: true
+  device_id: <your label>
 ```
 
-`set_image` verlangt, dass der Pfad in `allowlist_external_dirs` liegt.
+| Service | What it does |
+|---|---|
+| `set_image` | Send a picture from a file or a URL |
+| `send_test_pattern` | Send one of the built-in patterns, no file needed |
+| `clear_screen` | Clear the panel |
+| `set_rgb` | Drive the RGB LED |
+| `debug_probe` | Connect and dump the whole GATT table |
+| `debug_command` | Write raw bytes to the command characteristic |
 
-## Verwandte, aber inkompatible Firmware
+## Sending images
 
-Unter dem Namen „Zhsunyco" werden **zwei völlig unterschiedliche
-BLE-Protokolle** verkauft. Diese Integration spricht ausschließlich das
-erste:
+`set_image` takes either a local `path` or a `url`.
 
-| | WOLINK (diese Integration) | easyTag |
-|---|---|---|
-| Service/Charakteristiken | `…-4C53-4545-4C42-4B4E494C4F57` | `00001523/1525/1526-1212-efde-…` |
-| Authentifizierung | AES-128-ECB Challenge/Response | XOR-Schlüssel aus der MAC |
-| Kommandos | `0xA500`–`0xA509` | 20-Byte-Header + 204-Byte-Pakete, CRC-16/ARC |
-| Kennung | keine | ASCII `easyTag` / `eTag-CO` |
-| Rückmeldung | keine | Notify-Charakteristik |
-
-Für die easyTag-Variante gibt es eine eigene Implementierung:
-[roxburghm/zhsunyco-esl](https://github.com/roxburghm/zhsunyco-esl).
-
-Die **Diagnose-Probe erkennt beide** und meldet unter `protocol_family`,
-welche das Label tatsächlich spricht. Steht dort `easytag_xor`, ist diese
-Integration die falsche Software für das Gerät.
-
-## Beliebige Bilder senden
-
-`set_image` nimmt einen Dateipfad. Home Assistant lässt nur freigegebene
-Verzeichnisse zu, also einmalig in die `configuration.yaml`:
+For a local file, Home Assistant only allows directories you have opened up,
+so add this to `configuration.yaml` once:
 
 ```yaml
 homeassistant:
@@ -147,46 +128,61 @@ homeassistant:
 ```yaml
 action: esl_zhsunyco.set_image
 data:
-  device_id: <dein Label>
-  path: /config/www/esl/kalender.png
+  device_id: <your label>
+  path: /config/www/esl/calendar.png
   dither: true
 ```
 
-Um Größe und Farben musst du dich nicht kümmern: das Bild wird auf die
-Panelgröße gebracht, per Floyd-Steinberg auf die vier darstellbaren Farben
-gerastert und in 2 bpp gepackt. Ein Vollbild sind 17664 Byte, also 99
-Chunks — rechne mit etwa einer halben Minute, sobald die Verbindung steht.
-
-Bei Grafiken mit großen einfarbigen Flächen (Text, Tabellen, Kalender)
-liefert `dither: false` meist ein ruhigeres Bild als das Rastern.
-
-### Hat das Senden geklappt?
-
-Es gibt **zwei** verschiedene Fehlschläge, und sie fühlen sich unterschiedlich
-an:
-
-| Fall | Woran man ihn erkennt |
-|---|---|
-| Übertragung gescheitert (Label schläft, Verbindung bricht ab) | Der Dienst wirft einen Fehler, die Automation bricht ab |
-| Übertragung angenommen, Panel tut nichts | **Kein** Fehler — nur `label_reacted: false` |
-
-Der zweite ist der heimtückische: HA meldet Erfolg, das Label zeigt weiter
-das alte Bild. Deshalb geben `set_image`, `send_test_pattern`, `clear_screen`
-und `set_rgb` eine Antwort zurück:
+A URL needs no allowlist — Home Assistant does not gate outgoing URLs the
+way it gates file paths, and neither do its own image entities:
 
 ```yaml
 action: esl_zhsunyco.set_image
 data:
-  device_id: <dein Label>
-  path: /config/www/esl/kalender.png
-response_variable: ergebnis
+  device_id: <your label>
+  url: https://example.com/calendar.png
+```
+
+Only `http` and `https` are accepted, the download times out after 30
+seconds, and anything past 8 MB is refused rather than read into memory.
+
+You do not have to worry about size or colours. The picture is fitted to the
+panel, dithered onto the four colours it can display and packed at 2 bits
+per pixel. A full screen is 17664 bytes, which is 99 chunks — expect roughly
+half a minute once the connection is up.
+
+For graphics with large flat areas — text, tables, a calendar — `dither:
+false` usually looks cleaner than dithering, which speckles solid colour.
+
+The pixel format itself is not adjustable: it is measured, not chosen, and
+the panel model decides it.
+
+### Did the send work?
+
+There are **two** different failures, and they feel different:
+
+| Case | How you notice |
+|---|---|
+| The transfer failed (label asleep, connection dropped) | The service raises, the automation stops |
+| The transfer was accepted and the panel did nothing | **No error at all** — only `label_reacted: false` |
+
+The second is the treacherous one: Home Assistant reports success while the
+label still shows the old picture. So `set_image`, `send_test_pattern`,
+`clear_screen`, `set_rgb` and `debug_command` return a result:
+
+```yaml
+action: esl_zhsunyco.set_image
+data:
+  device_id: <your label>
+  path: /config/www/esl/calendar.png
+response_variable: result
 ```
 
 ```yaml
 results:
   - address: "66:66:17:40:27:77"
-    ok: true              # der Schreibvorgang selbst lief durch
-    label_reacted: true   # das Panel meldete busy, hat also gezeichnet
+    ok: true              # the write itself went through
+    label_reacted: true   # the panel reported busy, so it really drew
     connection_dropped: false
     error_code: 0
     bytes: 17664
@@ -194,57 +190,57 @@ results:
     at: "2026-09-06T19:12:04.881+00:00"
 ```
 
-**`label_reacted` ist die Prüfung, die zählt.** `ok: true` sagt nur, dass die
-Bytes rausgingen.
+**`label_reacted` is the check that matters.** `ok: true` only says the
+bytes went out.
 
-Die Antwort ist optional — bestehende Automationen ohne `response_variable`
-laufen unverändert weiter.
+The response is optional, so automations written without
+`response_variable` keep working unchanged.
 
-#### Automation mit Wiederholung
+#### An automation that retries
 
-Ein schlafendes Label ist der Normalfall, nicht die Ausnahme. Drei Versuche
-mit Pause dazwischen sind realistisch:
+A sleeping label is the normal case, not the exception. Three attempts with
+a real pause between them is realistic:
 
 ```yaml
 - repeat:
     count: 3
     sequence:
-      # Zurücksetzen, sonst steht nach einem Fehler noch das Ergebnis
-      # des vorherigen Durchlaufs in der Variable.
+      # Reset it: after a raised error the variable would otherwise still
+      # hold the result of the previous iteration.
       - variables:
-          ergebnis: null
+          result: null
       - action: esl_zhsunyco.set_image
         data:
-          device_id: <dein Label>
-          path: /config/www/esl/kalender.png
-        response_variable: ergebnis
+          device_id: <your label>
+          path: /config/www/esl/calendar.png
+        response_variable: result
         continue_on_error: true
       - if:
           - condition: template
-            value_template: >-
-              {{ ergebnis and ergebnis.results[0].label_reacted }}
+            value_template: "{{ result and result.results[0].label_reacted }}"
         then:
-          - stop: "Bild steht auf dem Panel"
+          - stop: "The picture is on the panel"
       - delay: "00:05:00"
 - action: persistent_notification.create
   data:
     title: ESL
-    message: Kalenderbild konnte nach drei Versuchen nicht übertragen werden.
+    message: The calendar image did not get through after three attempts.
 ```
 
-`continue_on_error: true` ist nötig, damit ein Verbindungsfehler die Schleife
-nicht sofort beendet. Das `variables:`-Zurücksetzen ist nicht kosmetisch: ohne
-es behält `ergebnis` nach einem geworfenen Fehler den Wert des letzten
-erfolgreichen Durchlaufs, und die Schleife bricht fälschlich ab.
+Both oddities in there are load-bearing. `continue_on_error: true` keeps a
+connection failure from ending the loop instead of driving it, and the
+`variables:` reset is not cosmetic: without it `result` keeps its last
+successful value after a raised error and the loop stops early, believing it
+succeeded.
 
-Zur Pause: Warte großzügig. Das Label advertised unregelmäßig, die Integration
-wartet ohnehin bis zu 300 s auf ein Fenster, und ein zu schneller zweiter
-Versuch konkurriert nur mit dem ersten um den einzigen Verbindungsslot.
+Be generous with the delay. The integration already waits up to 300 s for an
+advertising window, and a quick second attempt only competes with the first
+one for the single connection slot.
 
-#### Ohne Antwortvariable
+#### Without a response variable
 
-Der Zustand der `image`-Entität **ist** der Zeitstempel der letzten
-erfolgreichen Übertragung. Das reicht als Auslöser:
+The `image` entity's state **is** the timestamp of the last successful
+upload, which is enough to trigger on:
 
 ```yaml
 triggers:
@@ -252,509 +248,290 @@ triggers:
     entity_id: image.esl_66_66_17_40_27_77_panel
 ```
 
-Und als Prüfung, ob heute schon etwas ankam:
+And to ask whether anything landed today:
 
 ```yaml
 {{ states('image.esl_66_66_17_40_27_77_panel') | as_datetime | as_local
    > today_at('00:00') }}
 ```
 
-Ausführlicher steht der letzte Befehl mit Statusbytes und Deutung in der
-Diagnose-Datei unter `last_command`.
+The last command is also recorded in full, with status bytes and an
+interpretation, under `last_command` in the diagnostics download.
 
-### Was das Panel gerade zeigt
+### What the panel is showing
 
-Jedes Label hat eine `image`-Entität, die das zuletzt übertragene Bild
-zeigt. Sie wird **aus den gepackten Pixeln** erzeugt, nicht aus der
-Quelldatei — Dithering und Farbreduktion sind darin also genauso zu sehen
-wie auf dem Panel.
+Every label has an `image` entity holding the last picture that was
+uploaded. It is built **from the packed pixels**, not from the source file,
+so dithering and colour reduction show up in it exactly as they do on the
+panel.
 
 ```yaml
 type: picture-entity
 entity: image.esl_66_66_17_40_27_77_panel
 ```
 
-Sie **überlebt einen Neustart** von Home Assistant. Ein E-Ink-Panel hält
-sein Bild ohne Strom, und solange nichts anderes auf das Label schreibt,
-zeigt es nach dem Neustart weiterhin genau das. Gespeichert wird als
-base64-PNG in `.storage` — je nach Motiv rund 1 kB (Flächen, Text) bis
-14 kB (durchgehend gerastertes Foto).
+It **survives a restart**. An e-ink panel holds its image without power, and
+as long as nothing else writes to the label it is still showing exactly
+that. The picture is kept per label as a base64 PNG in `.storage`, which is
+about 1 kB for flat graphics and text and around 14 kB for a fully dithered
+photograph.
 
-Aktualisiert wird sie **nur nach einer erfolgreichen Übertragung**:
+It is updated **only after a successful transfer**:
 
-- Schlägt das Senden fehl, bleibt die vorherige Vorschau stehen — auf dem
-  Panel steht ja auch weiterhin das alte Bild.
-- **Bildschirm löschen verwirft sie.** Danach zeigt das Panel das Bild nicht
-  mehr, und es nach einem Neustart wiederherzustellen wäre ein Bild von
-  einem leeren Schirm. Was ein gelöschtes Panel genau anzeigt, steht
-  nirgends, deshalb lieber gar kein Bild als ein geratenes.
-- Wird das Label aus Home Assistant entfernt, wird der Speicher mitgelöscht.
+- If the send fails, the previous preview stays — which is also what the
+  panel is still showing.
+- **Clearing the screen discards it.** The panel is no longer showing the
+  image, and restoring it after a restart would be a picture of a blank
+  screen. What a cleared panel actually displays is not documented, so this
+  shows nothing rather than a guessed blank.
+- Removing the label from Home Assistant deletes the stored copy.
 
-Verfügbar bleibt sie außerdem, auch wenn das Label schläft: was auf dem
-Panel steht, hört nicht auf zu stimmen, nur weil gerade niemand es sieht.
+It also stays **available** while the label sleeps: what is on the panel
+does not stop being true because nobody can see it right now.
 
-Die Annahme dahinter ist, dass **nur** diese Integration Bilder auf das
-Label schreibt. Schreibt etwas anderes darauf, zeigt die Vorschau ein
-veraltetes Bild.
+The assumption underneath all of this is that **only** this integration
+writes images to the label. If something else does, the preview will be
+showing a stale picture.
 
-## Bekannte Unsicherheiten
+## Test patterns
 
-Diese Punkte sind im Herstellerdokument **nicht** spezifiziert und daher im
-Code als begründete Annahme umgesetzt. Sie sind bewusst an einer Stelle
-gebündelt, damit sie leicht korrigierbar sind:
+```yaml
+action: esl_zhsunyco.send_test_pattern
+data:
+  device_id: <your label>
+  pattern: diagnostic
+```
 
-- **Pixelformat für andere Panels als BWRY.** Für BWRY ist es keine Annahme
-  mehr: 2 Bit pro Pixel, MSB zuerst, zeilenweise, Palettenreihenfolge
-  Schwarz/Weiß/Gelb/Rot — am Gerät belegt (siehe unten). Für 1-Bit-Panels
-  ist die Packung weiterhin ungetestet; anpassbar über `MONO_BLACK_BIT`.
-- **Blockkomprimierung** (Abschn. 3.3/3.9) ist nicht beschrieben. In
-  `rle.py` liegt der RLE-Codec der easyTag-Firmware desselben Herstellers als
-  begründeter Kandidat — mit Encoder, Decoder und Round-Trip-Tests, aber
-  ungetestet gegen diese Hardware. Übertragen wird bisher ausschließlich
-  unkomprimiert über `0xA501`.
-- ~~**Byte-Reihenfolge** von `on_ms`/`off_ms`/`work_ms` (Abschn. 3.8) und der
-  Bildgröße (Abschn. 3.2).~~ Erledigt: Little Endian, am Gerät belegt — die
-  LED reagiert auf das 13-Byte-Layout und `01 a5` + Größe frischt das Panel
-  auf.
-- **Company Identifier** im Advertisement: Die Doku nennt `0xbbaa` für Byte
-  0–1. Bestätigt: Home Assistant meldet `0xBBAA`.
-- **Slot-Header** `PIC0x\0` (Abschn. 3.9) lässt bei Index 10 nur eine Ziffer
-  zu; implementiert ist zweistellig, also `PIC00`…`PIC10`.
-- **Panel-Auflösungen** in `const.py` stammen nicht aus der Doku und können
-  je nach Gerät abweichen.
+The `diagnostic` pattern is built to be read off a photograph. It shows a
+closed frame, the four colour blocks, two one-pixel gratings and the panel
+size as text, and each of those fails in a distinctive way:
 
-## Der AES-Handshake ist bestätigt
+| What you see | What it rules out |
+|---|---|
+| Frame closed all the way round | Width and height not swapped, whole area addressed |
+| Blocks in the order black, red, yellow, white | The palette mapping is right |
+| **Horizontal** one-pixel grating sharp, no smearing | The row length of 46 bytes is right |
+| **Vertical** one-pixel grating sharp, no offset | The MSB-first bit order is right |
 
-Ein Unlock-Sweep über alle sechs Varianten hat es entschieden — **`encrypt`
-ist korrekt**, also genau das, was die Doku beschreibt:
+A single pixel-level packing bug is visible in those gratings and nowhere
+else, which is how the packing was confirmed independently of the reference
+script.
 
-| Variante | Statusbyte 0 nach Unlock | Verbindung überlebt Kommando |
+## Related but incompatible firmware
+
+Two **completely different BLE protocols** are sold under the name
+"Zhsunyco". This integration speaks only the first:
+
+| | WOLINK (this integration) | easyTag |
 |---|---|---|
-| **`encrypt`** | **`0x00`** | **ja** |
-| decrypt | `0x06` | nein |
-| encrypt_reversed | `0x06` | nein |
-| decrypt_reversed | `0x06` | nein |
-| encrypt_then_reverse | `0x06` | nein |
-| echo | `0x06` | nein |
+| Service / characteristics | `…-4C53-4545-4C42-4B4E494C4F57` | `00001523/1525/1526-1212-efde-…` |
+| Authentication | AES-128-ECB challenge/response | XOR key derived from the MAC |
+| Commands | `0xA500`–`0xA509` | 20 byte header + 204 byte packets, CRC-16/ARC |
+| Identifier | none | ASCII `easyTag` / `eTag-CO` |
+| Feedback | none | notify characteristic |
 
-Die fünf falschen Varianten lösen exakt das aus, was die Doku für ein
-gesperrtes Label beschreibt: Das Gerät legt beim nächsten Write auf.
+There is a separate implementation for the easyTag variant:
+[roxburghm/zhsunyco-esl](https://github.com/roxburghm/zhsunyco-esl).
 
-### Das Statusbyte trägt einen undokumentierten Sperr-Indikator
+The **diagnostic probe recognises both** and reports which one the label
+actually speaks under `protocol_family`. If that says `easytag_xor`, this
+integration is the wrong software for the device.
 
-Die Doku definiert Byte 0 als BUSY („1: busy, 0: no busy"). Gemessen wurde:
+## What the document gets wrong
 
-- `0x00` → Unlock akzeptiert
-- `0x06` → Unlock abgelehnt
+The full measurement record is in
+[`docs/hardware-verified-findings.md`](docs/hardware-verified-findings.md).
+The two that matter most:
 
-Bit 0 ist also der dokumentierte BUSY-Flag, **Bits 1 und 2 zeigen den
-Sperrzustand** — das steht nirgends in der Doku. Die Integration prüft das
-seit 0.15.0 direkt nach jedem Unlock und warnt im Log, statt den Fehler
-erst beim ersten Kommando als „Characteristic not found" auftauchen zu
-lassen. In der Diagnose steht er als `unlock_verified`.
+**Commands go out little endian.** The document writes them as `0xA500`,
+`0xA504` and so on without saying how the two bytes reach the wire. The low
+byte goes first: `0xA500` is `00 a5`. Measured for `0xA500`, `0xA501`,
+`0xA504` and `0xA508`.
 
-Vorher wurde `0x06` fälschlich als „busy" gemeldet, weil das ganze Byte als
-Boolean gelesen wurde.
+**The advertisement mixes byte orders.** One probe captured all three
+sources at once:
 
-## Bestätigt gegen echte Hardware
+```
+Advertisement            : 30 00 00 0e 03 30 02 01 0b 99
+Version characteristic   : 30 00 00 0e 03 30 02 01
+Battery characteristic   : 99 0b   -> little endian = 2969 mV
+```
 
-Ein vollständiger Probe-Lauf an einem BLE-35BWRY hat folgendes belegt.
+The first eight advertisement bytes are byte-identical to the version
+characteristic, so the version fields decode the same way in both (little
+endian). The last two are the byte-reversal of the battery characteristic,
+so that one field alone is big endian. Reading the advertisement uniformly
+is wrong in either direction.
 
-### GATT-Tabelle
+### GATT table
 
-Alle fünf Charakteristiken liegen unter dem Service
+All five characteristics live under the single service
 `30323032-4C53-4545-4C42-4B4E494C4F57`:
 
-| Charakteristik | UUID-Präfix | Handle | Properties |
+| Characteristic | UUID prefix | Handle | Properties |
 |---|---|---|---|
-| Batterie | `35323032` | 14 | notify, read |
+| Battery | `35323032` | 14 | notify, read |
 | Status | `34323032` | 17 | notify, read |
 | Security | `33323032` | 20 | read, **write** |
 | Command | `31323032` | 23 | read, **write** |
 | Version | `32323032` | 26 | notify, read |
 
-**Die Command-Charakteristik unterstützt nur „Write with Response"** — kein
-Write-without-Response. Seit 0.19.0 ist `with_response` deshalb der Default
-und `without_response` gar nicht mehr auswählbar; ein Eintrag, der den Wert
-noch gespeichert hat, schreibt mit Response und bekommt eine Warnung ins
-Log.
-
-Alle drei Lese-Charakteristiken können außerdem **notify** — die Doku
-erwähnt das nicht. Bisher ungenutzt, aber der naheliegende Kanal für eine
-Rückmeldung nach dem Bildupload.
-
-MTU: **247 Bytes**. Geschrieben wird trotzdem in **180-Byte-Scheiben** —
-das ist die Größe, mit der drei vollständige Bilder ohne einen einzigen
-Fehlversuch durchgingen; größere Frames sind auf dieser Hardware nie
-probiert worden, und ein Bildupload ist der falsche Ort dafür. Meldet der
-Client gar keine MTU, gilt dieselbe Größe: der frühere Rückfallwert von 23
-(das ATT-Minimum) ließ 14 Nutzbytes übrig und machte aus einem Bild rund
-1262 Writes.
-
-### Unlock
-
-Challenge/Response ist bitgenau verifiziert:
-
-```
-Challenge : d8 2f 70 03 5f a0 99 07 36 fd e2 1c 4d a5 9b bf
-Antwort   : e0 87 76 67 af a5 3a 8b 00 6e 24 71 0f 58 fc 57
-```
-
-Danach meldet die Status-Charakteristik Fehlercode 0 (`no_error`).
-Die Status-Charakteristik liefert übrigens 32 Bytes statt der
-dokumentierten 2 — der Rest ist Null und wird ignoriert.
-
-### Gemischte Byte-Reihenfolge
-
-Ein Probe hat alle drei Quellen gleichzeitig erfasst:
-
-```
-Advertisement           : 30 00 00 0e 03 30 02 01 0b 99
-Version-Charakteristik  : 30 00 00 0e 03 30 02 01
-Batterie-Charakteristik : 99 0b   -> Little Endian = 2969 mV
-```
-
-Daraus folgt eindeutig:
-
-- Die ersten acht Advertisement-Bytes sind **byte-identisch** mit der
-  Version-Charakteristik. Die Versionsfelder müssen also in beiden Quellen
-  **gleich** dekodiert werden (Little Endian).
-- Die letzten beiden sind die **Byte-Umkehr** der Batterie-Charakteristik.
-  Nur dieses eine Feld ist im Advertisement Big Endian.
-
-Das komplette Advertisement einheitlich zu lesen ist in beiden Richtungen
-falsch. Die Doku erwähnt zu Byte-Reihenfolgen nichts.
-
-Die Bedeutung der Versionsfelder selbst bleibt offen: `03 30` lässt sich als
-`3.48`, `48.3` oder `3.30` lesen. Die Rohbytes stehen deshalb als
-`version_bytes` in der Diagnose.
-
-## Testbild senden
-
-Weil das Pixelformat nicht dokumentiert ist, kommt beim ersten Upload
-wahrscheinlich nicht das Richtige heraus. Deshalb gibt es eingebaute
-Testmuster — keine Bilddatei, kein `allowlist_external_dirs` nötig.
-
-**Ein Klick:** der Button **Testbild** am Gerät sendet das Diagnose-Muster.
-
-**Mit Parametern:**
-
-```yaml
-action: esl_zhsunyco.send_test_pattern
-target:
-  device_id: <dein Label>
-data:
-  pattern: diagnostic     # oder solid_black, quadrants, stripes_v, ...
-  encoding: auto          # auto | mono | bwry_packed | bwry_planes
-  bit_order: msb          # msb | lsb
-  rotate: 0
-  mirror: false
-```
-
-### Das Diagnose-Muster lesen
-
-Es ist so aufgebaut, dass ein Foto des Ergebnisses verrät, **welcher**
-Parameter falsch ist:
-
-| Beobachtung | Bedeutung |
-|---|---|
-| Nichts ändert sich | Upload kommt nicht an — erst `clear_screen` prüfen |
-| Rahmen fehlt oder ist doppelt | Breite und Höhe vertauscht → `rotate: 90` |
-| Ecken-Dreieck an der falschen Stelle | Drehung oder Spiegelung → `rotate` / `mirror` |
-| Farbblöcke in falscher Farbe | Palettenreihenfolge → `BWRY_PALETTE` in `imaging.py` |
-| Feine Streifen verschmieren/versetzt | Bit-Reihenfolge → `bit_order: lsb` |
-| Bild diagonal verzogen | Zeilenlänge stimmt nicht → anderes `encoding` |
-| Nur oberes Drittel gefüllt | Falsche Bits pro Pixel → `encoding: mono` statt `bwry_packed` |
-
-Sinnvolle Reihenfolge zum Durchprobieren: erst `solid_black` (reagiert das
-Panel überhaupt?), dann `quadrants` (Orientierung und Farben), dann
-`diagnostic` für die Feinheiten.
-
-## Fehlersuche
-
-### Diagnose-Probe
-
-Der schnellste Weg, ein Problem einzugrenzen: am Gerät den Button
-**Diagnose-Probe** drücken (alternativ der Dienst
-`esl_zhsunyco.debug_probe`). Er verbindet sich, listet
-die komplette GATT-Tabelle mit allen Charakteristiken und deren Properties
-auf, versucht das Unlock und liest anschließend Version, Batterie und Status
-im Rohformat. Das Ergebnis erscheint als Benachrichtigung und im Log.
-
-Der Button funktioniert auch dann, wenn alle anderen Entitäten
-„nicht verfügbar" sind — er scheitert nicht, sondern meldet den Fehlgrund
-unter `connection_error`.
-
-Besonders aussagekräftig sind zwei Felder:
-
-- `connection` — `ok` heißt, Verbindung und GATT-Zugriff funktionieren.
-- `reads.status.error_meaning` — `unlock_failed` bedeutet, dass die
-  Challenge/Response abgelehnt wurde; alles andere heißt, dass das Unlock
-  funktioniert hat.
-
-Zusätzlich liefert **Einstellungen → Geräte & Dienste → Zhsunyco ESL →
-Diagnose herunterladen** eine JSON-Datei mit dem rohen Advertisement, der
-Feld-für-Feld-Zerlegung und den Batteriewerten unter allen plausiblen
-Dekodierregeln.
-
-### Alle Entitäten „nicht verfügbar", keine Advertisements mehr
-
-Betrifft **0.9.0**. Ein Diagnose-Download hat dort automatisch eine Probe
-gestartet; lief deren Timeout ab, blieb eine interne Sperre dauerhaft
-gehalten und eine eventuell schon offene BLE-Verbindung bestehen. Ein
-verbundenes BLE-Gerät **sendet keine Advertisements mehr** — die Integration
-wurde dadurch blind und alle Entitäten fielen aus.
-
-Behoben in 0.9.1. Falls es noch auftritt: **Integration neu laden**
-(Einstellungen → Geräte & Dienste → ⋮ → Neu laden).
-
-Seit 0.10.0 gibt es zusätzlich:
-
-- Der Advertisement-Callback verlangt **keinen verbindungsfähigen Scanner**
-  mehr. Ohne diese Angabe verlangt Home Assistant standardmäßig einen — und
-  Advertisements, die nur ein passiver Scanner sieht, kamen nie an.
-- Alle 5 Minuten werden die Daten zusätzlich direkt aus dem
-  Bluetooth-Stack von Home Assistant gelesen. Ein ausbleibender Callback
-  lässt die Sensoren dadurch nicht mehr dauerhaft leer.
-- Die Diagnose-Datei enthält einen Abschnitt **`bluetooth`**. Er
-  unterscheidet die beiden grundverschiedenen Fälle:
-
-  | Feld | Bedeutung |
-  |---|---|
-  | `last_service_info_any: null` | Home Assistant sieht das Label **überhaupt nicht** — es ist still, außer Reichweite oder noch verbunden |
-  | `last_service_info_any` gefüllt, aber Entitäten leer | HA sieht es, unser Callback greift nicht |
-  | `scanners_seeing_this_label: []` | kein Adapter/Proxy empfängt es |
-  | `learned_advertising_interval_s` | wie oft HA das Label senden sieht |
-
-Der Diagnose-Download baut seit 0.9.1 **keine Verbindung mehr auf**. Für
-einen Probe-Bericht den Button **Diagnose-Probe** verwenden; das Ergebnis
-landet dann auch in der Diagnose-Datei.
-
-### „Characteristic … was not found" beim Bildupload
-
-Das ist **kein** Cache-Problem, sondern eine Folge des gesperrten Labels.
-Deine Doku, Abschnitt 2:
-
-> „If it is not unlocked, writing other services will be disconnected
-> immediately."
-
-Beobachtung, die dazu passt:
-
-| Aktion | Writes auf Command | Ergebnis |
-|---|---|---|
-| Diagnose-Probe | 0 (nur Lesen + Security-Write) | funktioniert |
-| Bildschirm löschen / RGB | 1 | „ok", aber keine Reaktion |
-| Testbild | ~75 | „Characteristic not found" ab dem 2. |
-
-Der erste Command-Write bringt das Label dazu aufzulegen. Danach hat bleak
-keine Service-Tabelle mehr, und jeder weitere Write meldet die
-Charakteristik als nicht gefunden. Die Integration erkennt das jetzt und
-schreibt es in `last_command` unter `connection_dropped` samt Deutung.
-
-### Das Label entzieht die Autorisierung
-
-Gemessen: Nach dem Schreiben von `04 a5` beantwortet das Label schon das
-nächste **Lesen** mit einem ATT-Fehler:
-
-```
-BluetoothGATTErrorResponse: Insufficient authorization (8)
-```
-
-Das ist ATT-Fehlercode 0x08 und kommt vom Label selbst. Ein abgelehntes
-Kommando macht also das Unlock zunichte.
-
-> **Korrektur (0.19.0).** Aus „`a5 04` löst das nicht aus" wurde hier
-> geschlossen, die dokumentierte Byte-Reihenfolge stimme. Das war falsch.
-> Der Messaufbau selbst hat den Fehler erzeugt: `a5 04` stand im Sweep an
-> erster Stelle, `04 a5` kam danach auf **derselben** Verbindung — die das
-> Label zu diesem Zeitpunkt längst gekappt hatte. Ein direkter Lauf über
-> einen lokalen Adapter zeigt das Gegenteil: `00 a5` und `01 a5` haben ein
-> Bild übertragen und das Panel dreimal neu gezeichnet. Kommandos gehen
-> **little endian** raus. Siehe
-> [`docs/hardware-verified-findings.md`](docs/hardware-verified-findings.md).
-
-Daraus folgen zwei Dinge, beide seit 0.17.0 umgesetzt:
-
-- Der Kommando-Sweep verwendet **eine Verbindung pro Kandidat**. Vorher
-  waren alle Kandidaten nach dem ersten abgelehnten wertlos.
-- Der Report unterscheidet jetzt zwischen `rejected` (Label entzieht den
-  Zugriff) und `tolerated_but_ignored` (Kommando angenommen, aber wirkungslos).
-  Nur Letzteres ist ein Hinweis auf eine richtige Kodierung.
-
-### Das Label nimmt Kommandos an und tut nichts
-
-Beobachtet: Verbindung steht, Status ist lesbar, Fehlercode bleibt 0, aber
-`busy` steigt nie. Das Label **ignoriert die Writes stillschweigend** — genau
-das Verhalten eines Geräts, das noch **gesperrt** ist. Die Doku sagt dazu:
-
-> „If it is not unlocked, writing other services will be disconnected"
-
-Der AES-Handshake war damit lange der Hauptverdächtige — unsere Rechnung
-war verifiziert, dass das **Label sie akzeptiert**, war es nie.
-
-**Das ist inzwischen beantwortet: der Handshake stimmt.** Zwei unabhängige
-Messungen belegen ihn — ein Sweep über einen ESPHome-Proxy, bei dem nur
-`encrypt` das Status-Byte entsperrt hinterließ, und ein direkter Lauf, der
-nach dem Unlock `ERR=0` las und danach 98 Kommando-Writes am Stück ohne
-Abbruch durchbrachte.
-
-Deshalb gibt es seit 0.19.0 **keine Unlock-Varianten mehr**: weder die
-Option „Unlock-Berechnung" noch die Aktion `debug_unlock_sweep`. Eine
-falsche Variante scheitert nicht bloß, sie lässt das Label die
-Autorisierung entziehen — fünf davon vorrätig zu halten war ein Risiko
-ohne Gegenwert. Gesendet wird AES-128-ECB über die gelesene Challenge.
-
-### Hat das Kommando wirklich etwas bewirkt?
-
-Ein Schreibvorgang auf die Command-Charakteristik meldet Erfolg, **egal ob
-das Label ihn ausführt**. Seit 0.12.0 liest die Integration deshalb um jedes
-Kommando herum die Status-Charakteristik: einmal davor, dann bis zu 8
-Sekunden lang danach. Ein E-Ink-Refresh dauert Sekunden, in denen das Panel
-`busy` meldet.
-
-Das Ergebnis steht in der Diagnose unter `last_command`:
-
-```json
-"label_reacted": true,
-"interpretation": "the panel went busy, so it acted on the command"
-```
-
-- `label_reacted: true` → das Panel hat gearbeitet, das Kommando kam an
-- `label_reacted: false` → der Schreibvorgang wurde angenommen, das Panel
-  hat aber nichts getan; die Kodierung stimmt vermutlich nicht
-
-Der Status-Sensor wird nach jedem Kommando direkt aktualisiert.
-
-### „Characteristic 31323032-… was not found"
-
-Die Verbindung stand, aber die zwischengespeicherte GATT-Tabelle enthielt
-die Command-Charakteristik nicht — obwohl ein Probe sie zuvor gefunden
-hatte. Seit 0.11.0 prüft die Integration direkt nach dem Verbinden, ob
-Security- und Command-Charakteristik vorhanden sind. Fehlen sie, wird der
-Service-Cache verworfen und **einmal neu verbunden**. Hilft auch das nicht,
-sagt die Fehlermeldung das ausdrücklich, statt an einem Schreibvorgang zu
-scheitern.
-
-Auch eine offen gehaltene Verbindung wird vor jeder Wiederverwendung
-geprüft.
-
-### Das Label reagiert nicht auf Kommandos
-
-Ein Schreibvorgang auf die Command-Charakteristik meldet keinen Fehler,
-selbst wenn das Label ihn ignoriert. Die **Status-Charakteristik ist der
-Rückkanal**: Ändert sich `busy` oder `error_code` nach einem Kommando nicht,
-wurde es nicht verstanden.
-
-Genau das prüft der Sweep — und zwar alle Kandidaten in **einer** Verbindung,
-weil das Aufwecken des Labels der langsame Teil ist:
-
-```yaml
-action: esl_zhsunyco.debug_command_sweep
-target:
-  device_id: <dein Label>
-data:
-  opcode: "A504"     # Bildschirm löschen
-```
-
-Standardmäßig (`preset: clear_screen`) werden **beide dokumentierten
-Löschwege** getestet, nicht nur Byte-Varianten eines einzigen — in
-Little-Endian zuerst, weil das die gemessene Reihenfolge ist:
-
-| Payload | Herkunft |
-|---|---|
-| `04 a5` | Abschn. 3.7 „Unbind Clear Screen", little endian |
-| `09 a5 fe fe` | Abschn. 3.10, beide Ebenen löschen (Index −2) |
-| `09 a5 fe ff` | Abschn. 3.10, nur Ebene A löschen |
-| `09 a5 ff fe` | Abschn. 3.10, nur Ebene B löschen |
-| `04 a5 00`, `04 a5 00 00` | mit Längenbytes |
-| `a5 04`, `a5 09 fe fe` | wie die Doku es schreibt, big endian |
-
-„Unbind" in 3.7 klingt nach Kopplung/Reset — möglicherweise ist gar nicht
-das der normale Löschweg, sondern 3.10 mit Index −2. **Löschen ist als
-einziges Kommando in keiner Byte-Reihenfolge gemessen**, deshalb gibt es
-diesen Sweep überhaupt noch. Mit `preset: opcode` lassen sich stattdessen
-Varianten aus einem beliebigen Opcode ableiten.
-
-Das Ergebnis kommt als Benachrichtigung:
-
-- `status_changed: true` bei einer Variante → **diese Kodierung ist richtig**
-- `any_status_changed: false` → keine Variante wurde verstanden
-- `connected_after: false` → das Label hat nach dieser Variante aufgelegt,
-  was ebenfalls eine Reaktion ist
-
-Eigene Kandidaten gehen auch: `payloads: ["04 a5", "a5 04 00 00"]`.
-
-Das Ergebnis des letzten Kommandos steht außerdem als `last_command` in der
-Diagnose-Datei.
-
-### Kommandos scheitern mit „out of connection slots"
-
-Ein ESL schläft zwischen seinen Advertisements — Pausen von mehreren Minuten
-sind normal. Ein Bluetooth-Proxy kann eine Verbindung nur zu einem Gerät
-aufbauen, das er **gerade** sieht. Außerhalb dieses Fensters scheitert jeder
-Versuch, egal wie oft wiederholt wird:
+They are characteristics of one service, not five separate services.
+Resolving them with `get_service()` returns `None`, which is a plausible
+explanation for "characteristic not found" reports elsewhere.
+
+The command characteristic offers only **write with response** — there is no
+write-without-response, so there was never a choice to configure.
+
+All three readable characteristics can also **notify**, which the document
+does not mention. Unused so far, but the obvious channel for feedback after
+an upload.
+
+MTU is **247 bytes**, and writes still go out in **180 byte slices**: that
+is the size that carried three full images without a single failed write.
+Larger frames have never been tried on this hardware, and a bulk upload is
+the wrong place to find out. If the client reports no MTU at all, the same
+size is assumed — the old fallback of 23, the ATT minimum, left 14 usable
+bytes and turned one image into about 1262 writes.
+
+### The status byte carries an undocumented lock indicator
+
+The document defines byte 0 of the status characteristic as BUSY, "1: busy,
+0: no busy", so only bit 0 is that flag. Bits 1 and 2 are not in the
+document at all:
+
+- `0x00` → the unlock was accepted
+- `0x06` → the label is still locked
+
+The integration checks this right after every connect and warns in the log,
+rather than letting a rejected unlock surface minutes later as a missing
+characteristic. It appears as `unlock_verified` in the diagnostics.
+
+## Remaining unknowns
+
+These are not specified in the vendor document and are implemented as
+reasoned assumptions:
+
+- **The pixel format for panels other than BWRY.** For BWRY it is no longer
+  an assumption: 2 bits per pixel, MSB first, row-major, palette order
+  black, white, yellow, red — all measured. The 1 bit packing for mono
+  panels is untested; `MONO_BLACK_BIT` in `imaging.py` adjusts it.
+- **Block compression** (sec. 3.3) is not described anywhere, so `0xA502`
+  is not used. Everything is sent uncompressed through `0xA501`.
+- **The meaning of the version fields.** `03 30` could be read as `3.48`,
+  `48.3` or `3.30`. The raw bytes are in the diagnostics as `version_bytes`.
+- **Panel resolutions** in `const.py` for models other than the BLE-35BWRY
+  do not come from the document and may be wrong.
+
+## Troubleshooting
+
+### Start with the diagnostic probe
+
+The fastest way to narrow anything down: press the **Diagnostic probe**
+button on the device, or call `esl_zhsunyco.debug_probe`. It connects,
+lists the whole GATT table with every characteristic and its properties,
+attempts the unlock and then reads version, battery and status raw. The
+result arrives as a notification and in the log.
+
+The button works even when every other entity is unavailable — it does not
+fail, it reports why under `connection_error`.
+
+Two fields say the most:
+
+- `connection` — `ok` means the connection and GATT access work.
+- `reads.status.error_meaning` — `unlock_failed` means the challenge/response
+  was rejected; anything else means the unlock worked.
+
+**Settings → Devices & services → Zhsunyco ESL → Download diagnostics**
+additionally gives you a JSON file with the raw advertisement and its
+field-by-field decoding. The download does **not** open a connection; use
+the probe button for that.
+
+### The first command takes minutes
+
+An ESL sleeps between advertisements, and gaps of several minutes are
+normal. A Bluetooth proxy can only open a connection to a device it can
+**currently** see, so outside that window every attempt fails no matter how
+often it is retried:
 
 ```
 BleakOutOfConnectionSlotsError: ... no scanner currently has it in its
 discovered devices ... last advertisement 262s ago
 ```
 
-Die Integration wartet deshalb seit 0.6.0 auf das nächste Advertisement
-und verbindet sich innerhalb dieses Fensters. Der **erste** Tastendruck
-kann dadurch spürbar dauern — das ist normal und kein Fehler.
+So the integration waits for the next advertisement — up to 300 s — and
+connects inside that window. The first button press can take noticeably
+long. That is normal, not a fault.
 
-Seit 0.19.0 sind es **bis zu 300 s** statt 180. Mit durchgehendem aktivem
-Scan gemessen: einzelne Fenster von 10–30 s finden das Label bei 20 cm
-Abstand und −53 dBm regelmäßig **nicht**, und direkt nach einer Übertragung
-blieb ein Lauf über 120 s am Stück leer. 180 s lagen damit genau auf der
-beobachteten Streuung.
+300 s is measured, not guessed: with a continuous active scan at 20 cm and
+−53 dBm, single windows of 10–30 s regularly missed the label entirely, and
+one run stayed empty for over 120 s straight after a transfer.
 
-Seit 0.9.0 bleibt die Verbindung danach offen — seit 0.19.0 für **15
-Sekunden** statt 60 (einstellbar in den Optionen, 0 = sofort trennen).
-Folgekommandos innerhalb dieses Fensters wirken **sofort**, weil nicht
-erneut gewartet werden muss.
+Afterwards the connection is held open for **15 seconds** (adjustable in the
+options, `0` disconnects immediately). Commands inside that window take
+effect immediately because nothing has to be waited for.
 
-Kürzer, weil ein **verbundenes** BLE-Gerät gar nicht mehr advertised: jede
-Sekunde am offenen Link ist eine Sekunde, in der das Label für alles andere
-unsichtbar ist — auch für den Scanner von Home Assistant selbst.
+It is deliberately short, because a **connected** BLE device stops
+advertising altogether: every second on an open link is a second in which
+the label is invisible to everything else, including Home Assistant's own
+scanner.
 
-Zum Vergleich: Die Referenzimplementierung
-[roxburghm/zhsunyco-esl](https://github.com/roxburghm/zhsunyco-esl) wartet
-mit `BleakScanner.find_device_by_address(..., timeout=120.0)` genauso auf ein
-Advertisement — das Warten ist also keine Eigenheit dieser Integration,
-sondern eine Eigenschaft der Geräteklasse. Sie hält die Verbindung
-allerdings über den gesamten Vorgang offen, was diese Integration jetzt
-ebenfalls tut.
+For comparison, the reference implementation
+[roxburghm/zhsunyco-esl](https://github.com/roxburghm/zhsunyco-esl) waits
+the same way with `BleakScanner.find_device_by_address(..., timeout=120.0)`.
+The waiting is a property of this class of device, not a quirk of this
+integration.
 
-Hilft das nicht, steht der Proxy zu weit weg oder hat keine freien
-Verbindungs-Slots. Ein zusätzlicher
-[ESPHome-Bluetooth-Proxy](https://esphome.github.io/bluetooth-proxies/) in
-der Nähe des Labels ist dann die Lösung.
+If that does not help, the proxy is too far away or has no free connection
+slots. Another
+[ESPHome Bluetooth proxy](https://esphome.github.io/bluetooth-proxies/)
+near the label is the fix.
 
-### Zwei ESL-Integrationen gleichzeitig
+### Two ESL integrations at once
 
-Ein BLE-Label kann immer nur **eine** Verbindung gleichzeitig annehmen. Wenn
-eine zweite Integration (z. B. `esl_tag`) dasselbe Label anspricht, greifen
-beide abwechselnd zu und Kommandos gehen verloren. Falls beide installiert
-sind: die andere Integration für das Label testweise deaktivieren.
+A BLE label accepts only **one** connection at a time. If a second
+integration (`esl_tag`, say) talks to the same label, the two take turns and
+commands go missing. If both are installed, disable the other one for this
+label as a test.
 
-### LED und Bildschirm löschen bleiben wirkungslos
+### All entities unavailable, no advertisements
 
-Beide sind an einem BLE-35BWRY belegt und funktionieren, seit die Opcodes in
-0.19.0 auf Little-Endian umgestellt wurden. Wenn sie bei dir wirkungslos
-bleiben:
+Affects **0.9.0** only. A diagnostics download used to start a probe
+automatically; if that timed out, an internal lock stayed held and an open
+BLE connection stayed open. A connected BLE device sends no advertisements,
+so the integration went blind and every entity dropped out.
 
-1. **Version prüfen.** Vor 0.19.0 hat die Integration `a5 04` statt `04 a5`
-   geschickt — das Label nimmt den Write an und tut nichts.
-2. **`unlock_verified` in der Diagnose prüfen.** Steht dort `false`, ist das
-   Label gesperrt und ignoriert grundsätzlich jedes Kommando.
-3. **`last_command` in der Diagnose lesen.** `label_reacted: false` heißt,
-   das Panel ist nach dem Kommando nie `busy` geworden.
+Fixed in 0.9.1. If it still happens: **reload the integration**
+(Settings → Devices & services → ⋮ → Reload).
 
-Handelt es sich um ein **anderes Modell**, ist die Byte-Reihenfolge dort
-nicht gemessen. Dann hilft `debug_command_sweep` (siehe oben).
+The diagnostics section named `bluetooth` separates the two very different
+cases:
 
-### Debug-Logging aktivieren
+| Field | Meaning |
+|---|---|
+| `last_service_info_any: null` | Home Assistant cannot see the label **at all** — silent, out of range, or still connected |
+| `last_service_info_any` set but entities empty | HA sees it, our callback is not firing |
+| `scanners_seeing_this_label: []` | no adapter or proxy is receiving it |
+| `learned_advertising_interval_s` | how often HA sees the label transmit |
+
+### The LED or clear screen does nothing
+
+Both are verified on a BLE-35BWRY and work since the opcodes were switched
+to little endian in 0.19.0. If they do nothing for you:
+
+1. **Check the version.** Before 0.19.0 the integration sent `a5 04` instead
+   of `04 a5`. The label accepts that write and does nothing.
+2. **Check `unlock_verified` in the diagnostics.** If it is `false` the
+   label is locked and ignores every command by definition.
+3. **Read `last_command` in the diagnostics.** `label_reacted: false` means
+   the panel never went busy after the command.
+
+On a **different model** the byte order has not been measured. Try both with
+`esl_zhsunyco.debug_command`, one payload at a time, on separate
+connections — a rejected command revokes authorisation, so anything sent
+after it on the same link proves nothing.
+
+### Enable debug logging
 
 ```yaml
 logger:
@@ -763,38 +540,44 @@ logger:
     custom_components.esl_zhsunyco: debug
 ```
 
-**Status meldet `unlock_failed` (Fehlercode 5 laut Abschn. VI):** Das Label hat
-die Challenge/Response abgelehnt. Prüfen, ob die Firmware denselben AES-Key
-verwendet.
+**Status reports `unlock_failed` (error code 5, section VI):** the label
+rejected the challenge/response. Check whether the firmware uses the same
+AES key.
 
-**„not in range of any Bluetooth adapter or proxy":** Home Assistant sieht das
-Label gerade nicht. Bei ESPHome-Proxies muss `bluetooth_proxy: active: true`
-gesetzt sein, sonst sind nur passive Advertisements möglich.
+**"not in range of any Bluetooth adapter or proxy":** Home Assistant cannot
+see the label right now. ESPHome proxies need `bluetooth_proxy: active:
+true`, otherwise only passive advertisements are possible.
 
-## Entwicklung
+## Development
 
 ```bash
 pip install -r requirements-test.txt ruff
 
-ruff check custom_components tests
-ruff format --check custom_components tests
+ruff check custom_components tests scripts
+ruff format --check custom_components
 
-python tests/test_protocol.py      # Protokoll, ohne Home Assistant
-pytest tests/integration -q        # Integration, gegen echtes Home Assistant
+python scripts/check_services.py   # the rules hassfest applies, run locally
+python tests/test_protocol.py      # protocol, no Home Assistant needed
+pytest tests/integration -q        # against a real Home Assistant
 ```
 
-Es gibt zwei Testebenen:
+There are two levels of test:
 
-- **`tests/test_protocol.py`** prüft die erzeugten Wire-Bytes gegen die Doku —
-  Challenge/Response beim Unlock, das 13-Byte-RGB-Layout, Chunk-Offsets beim
-  Bildupload, die vorzeichenbehafteten Multi-Screen-Indizes und das
-  Advertisement-Parsing. Läuft ohne Home-Assistant-Installation, weil
-  `protocol.py` bewusst keine HA-Importe enthält — dieselbe Datei lässt sich
-  daher aus einem einfachen Skript gegen echte Hardware testen.
-- **`tests/integration/`** startet eine echte Home-Assistant-Instanz und prüft
-  Config-Flow, Options-Flow, Entity-Registrierung, Dienste und die
-  Advertisement-Verarbeitung.
+- **`tests/test_protocol.py`**, `test_imaging.py` and `test_diagnostics.py`
+  check the generated wire bytes against the document and against what was
+  measured — the unlock challenge/response, the 13 byte RGB layout, chunk
+  offsets in an upload, the pixel packing and advertisement parsing. They
+  run without a Home Assistant installation, because `protocol.py` and
+  `imaging.py` deliberately contain no HA imports; the same files can be
+  driven against real hardware from a plain script.
+- **`tests/integration/`** starts a real Home Assistant instance and covers
+  the config flow, options flow, entity registration, services, the image
+  entity and advertisement handling.
 
-## Lizenz
+`scripts/check_services.py` reimplements the rules hassfest applies to
+`services.yaml` and the translations, so that class of failure is caught
+before pushing rather than in CI.
 
-MIT — siehe [LICENSE](LICENSE).
+## Licence
+
+MIT — see [LICENSE](LICENSE).

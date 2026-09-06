@@ -1,20 +1,20 @@
 """
-Paletten-Kalibrierung fuer das BLE-35BWRY (2 Bit pro Pixel, 4 Farben).
+Palette calibration for the BLE-35BWRY (2 bits per pixel, 4 colours).
 
-Legt vier gleich hohe Baender ueber das gesamte Display, jedes gefuellt mit
-einem der vier moeglichen 2-Bit-Codes. Aus einem Foto des Ergebnisses laesst
-sich die Zuordnung Code -> Farbe direkt ablesen.
+Puts four equally tall bands across the whole display, each filled with one
+of the four possible 2 bit codes. A photograph of the result gives the
+code -> colour mapping directly.
 
-Gemessenes Ergebnis (2026-09-06), von oben nach unten:
+Measured result (2026-09-06), top to bottom:
 
-    Code 00 (0x00) -> Schwarz
-    Code 01 (0x55) -> Weiss
-    Code 10 (0xAA) -> Gelb
-    Code 11 (0xFF) -> Rot
+    Code 00 (0x00) -> black
+    Code 01 (0x55) -> white
+    Code 10 (0xAA) -> yellow
+    Code 11 (0xFF) -> red
 
-Das entspricht BWRY_PALETTE in imaging.py Index fuer Index.
+That matches BWRY_PALETTE in imaging.py index for index.
 
-Nutzung:
+Usage:
     python palette_calibration.py --mac 66:66:17:40:27:77
 """
 
@@ -26,7 +26,7 @@ from bleak import BleakClient
 
 import ble35bwry_reference as esl
 
-# Ein Byte fasst 4 Pixel. Ein durchgehender Farbcode ergibt diese Bytewerte:
+# One byte holds 4 pixels. A constant colour code gives these byte values:
 CODE_BYTES = {
     0b00: 0x00,
     0b01: 0x55,
@@ -36,7 +36,7 @@ CODE_BYTES = {
 
 
 def build_palette_bitmap() -> bytes:
-    """Vier horizontale Baender, je ein konstanter 2-Bit-Code."""
+    """Four horizontal bands, each a constant 2 bit code."""
     out = bytearray()
     band_height = esl.HEIGHT // 4
     codes = [0b00, 0b01, 0b10, 0b11]
@@ -48,40 +48,40 @@ def build_palette_bitmap() -> bytes:
 
 async def run(args: argparse.Namespace) -> None:
     bitmap = build_palette_bitmap()
-    print(f"Palettenbild: {len(bitmap)} Bytes "
+    print(f"Palette image: {len(bitmap)} bytes "
           f"({esl.WIDTH}x{esl.HEIGHT} @ {esl.BITS_PER_PIXEL}bpp, "
-          f"{esl.BYTES_PER_ROW} Bytes/Zeile)")
+          f"{esl.BYTES_PER_ROW} bytes/row)")
 
     device = await esl.find_device(args.mac, args.scan_timeout, args.scan_retries)
     if device is None:
-        raise RuntimeError(f"Geraet {args.mac} nicht gefunden.")
+        raise RuntimeError(f"Device {args.mac} not found.")
 
     async with BleakClient(device, timeout=40.0) as client:
-        print("Verbunden.")
+        print("Connected.")
         await esl.unlock(client)
-        print("Entsperrt.")
+        print("Unlocked.")
 
         busy, err = await esl.read_status(client)
         battery = await esl.read_battery_mv(client)
         print(f"Status: BUSY={busy} ERR={err} ({esl.ERR_TEXT.get(err, '?')}), "
-              f"Batterie: {battery} mV")
+              f"battery: {battery} mV")
 
-        print("Sende ...")
+        print("Sending ...")
         await esl.send_image_bytes(client, bitmap)
-        print("Gesendet. Das Display braucht jetzt einige Sekunden.")
+        print("Sent. The display needs a few seconds now.")
 
         try:
             await asyncio.sleep(6.0)
             busy, err = await esl.read_status(client)
-            print(f"Status nachher: BUSY={busy} ERR={err} "
+            print(f"Status afterwards: BUSY={busy} ERR={err} "
                   f"({esl.ERR_TEXT.get(err, '?')})")
         except Exception as err:
-            # Das Label trennt waehrend des E-Paper-Refreshs regelmaessig.
-            print(f"(Kein Status nach dem Refresh - Tag hat getrennt: {err})")
+            # The label routinely disconnects during the e-paper refresh.
+            print(f"(No status after the refresh - the tag disconnected: {err})")
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="BLE-35BWRY Palettenkalibrierung")
+    p = argparse.ArgumentParser(description="BLE-35BWRY palette calibration")
     p.add_argument("--mac", required=True)
     p.add_argument("--scan-timeout", type=float, default=45.0)
     p.add_argument("--scan-retries", type=int, default=6)
@@ -92,5 +92,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(run(parse_args()))
     except Exception as exc:
-        print(f"Fehler: {exc}", file=sys.stderr)
+        print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)

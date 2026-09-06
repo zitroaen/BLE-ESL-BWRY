@@ -1,34 +1,33 @@
-# Am Gerät verifizierte Protokoll-Erkenntnisse (BLE-35BWRY)
+# Protocol findings verified on hardware (BLE-35BWRY)
 
-Dieses Dokument hält fest, was am **echten Label** gemessen wurde, nicht was
-das Herstellerdokument vermuten lässt. Mehrere Annahmen im aktuellen Code sind
-damit bestätigt, eine zentrale ist widerlegt.
+This document records what was **measured on a real label**, not what the
+vendor document implies. Several assumptions in the code are confirmed by
+it and one central one was overturned.
 
-Alles hier Beschriebene wurde am **2026-09-06** an einem physischen
-BLE-35BWRY reproduziert.
+Everything below was reproduced on **2026-09-06** on a physical BLE-35BWRY.
 
-## Testaufbau
+## Test setup
 
 | | |
 |---|---|
-| Label | `66:66:17:40:27:77`, Advertising-Name `WL17402777` |
-| Host | Windows 11, Python 3.10.11, bleak 1.1.1 (WinRT-Backend) |
-| Verbindung | **direkter** BLE-Adapter, kein ESPHome-Proxy, kein Home Assistant |
-| Abstand | Label direkt am Rechner, RSSI −53 dBm |
+| Label | `66:66:17:40:27:77`, advertising name `WL17402777` |
+| Host | Windows 11, Python 3.10.11, bleak 1.1.1 (WinRT backend) |
+| Connection | **direct** BLE adapter, no ESPHome proxy, no Home Assistant |
+| Distance | label next to the machine, RSSI −53 dBm |
 
-Die Home-Assistant-Integration war während der Messungen deaktiviert, damit
-nichts um den einzigen Verbindungsslot konkurriert.
+The Home Assistant integration was disabled during the measurements so that
+nothing competed for the single connection slot.
 
-Das verwendete Referenzskript liegt unter
+The reference script used is
 [`hardware-verification/ble35bwry_reference.py`](hardware-verification/ble35bwry_reference.py).
-Es ist bewusst minimal und ohne Home-Assistant-Abhängigkeiten, damit die
-Messung nachvollziehbar bleibt.
+It is deliberately minimal and free of Home Assistant dependencies so the
+measurement stays reproducible.
 
 ---
 
-## 1. GATT-Aufbau — bestätigt
+## 1. GATT layout — confirmed
 
-Vollständiger Discovery-Dump:
+Full discovery dump:
 
 ```
 Service 00001800-0000-1000-8000-00805f9b34fb   (Generic Access)
@@ -37,61 +36,59 @@ Service 00001800-0000-1000-8000-00805f9b34fb   (Generic Access)
   Char 00002a04-…  props=['read']
 Service 00001801-0000-1000-8000-00805f9b34fb   (Generic Attribute)
   Char 00002a05-…  props=['indicate']
-Service 30323032-4c53-4545-4c42-4b4e494c4f57   ← alle Nutzdaten hier
-  Char 35323032-4c53-4545-4c42-4b4e494c4f57  props=['read', 'notify']   Batterie
+Service 30323032-4c53-4545-4c42-4b4e494c4f57   ← all payload lives here
+  Char 35323032-4c53-4545-4c42-4b4e494c4f57  props=['read', 'notify']   Battery
   Char 34323032-4c53-4545-4c42-4b4e494c4f57  props=['read', 'notify']   Status
   Char 33323032-4c53-4545-4c42-4b4e494c4f57  props=['read', 'write']    Security
   Char 31323032-4c53-4545-4c42-4b4e494c4f57  props=['read', 'write']    Command
   Char 32323032-4c53-4545-4c42-4b4e494c4f57  props=['read', 'notify']   Version
 ```
 
-**Die fünf UUIDs in `const.py` sind korrekt.** Wichtig ist die Struktur: es sind
-**Characteristics eines einzigen Service** `30323032-…`, nicht fünf eigene
-Services. Wer sie als Service-UUIDs auflöst (`get_service()`), bekommt `None` —
-das ist der ursprüngliche Fehler des Vorgängerskripts und eine plausible
-Erklärung für frühere "Characteristic not found"-Meldungen.
+**The five UUIDs in `const.py` are correct.** What matters is the structure:
+these are **characteristics of a single service** `30323032-…`, not five
+services of their own. Resolving them as service UUIDs (`get_service()`)
+returns `None` — that was the original bug in the predecessor script and a
+plausible explanation for earlier "characteristic not found" reports.
 
-### Nebenbefund: Write-ohne-Response gibt es nicht
+### Side finding: there is no write-without-response
 
-Die Command-Characteristic meldet ausschließlich `['read', 'write']` — **kein**
-`write-without-response`. Die Option `CONF_WRITE_MODE` mit dem Wert
-`without_response` (`WRITE_MODE_NO_RESPONSE` in `const.py`) kann an diesem Label
-also nicht funktionieren. `auto` und `with_response` sind gleichwertig richtig.
-
----
-
-## 2. AES-Unlock — bestätigt, Variante `encrypt`
-
-Ablauf laut Doku, exakt so umgesetzt und akzeptiert:
-
-1. 16 Byte Challenge von `33323032-…` **lesen**
-2. Mit AES-128-**ECB** und dem Herstellerschlüssel **verschlüsseln**
-3. Ergebnis auf dieselbe Characteristic **zurückschreiben**
-
-Messung direkt nach dem Unlock:
-
-```
-Entsperrt.
-Status: BUSY=0 ERR=0 (kein Fehler), Batterie: 2947 mV
-```
-
-`ERR=0` — nicht `5` (`unlock_failed`). Anschließend wurden **98 aufeinander­
-folgende Kommando-Writes** akzeptiert, ohne dass das Label die Verbindung
-gekappt hat.
-
-**Folgerung:** `DEFAULT_UNLOCK_VARIANT = "encrypt"` ist richtig. Die übrigen
-Einträge in `UNLOCK_VARIANTS` (`decrypt`, `*_reversed`, `echo`) und der
-`debug_unlock_sweep` werden nicht gebraucht. Das Weglassen der Challenge (also
-das Verschlüsseln von 16 Nullbytes, wie im pre-HACS-Prototyp) ist dagegen
-definitiv falsch.
+The command characteristic reports `['read', 'write']` and nothing else — no
+`write-without-response`. A write mode option offering it could never have
+worked on this label, which is why that option no longer exists.
 
 ---
 
-## 3. ⚠️ Byte-Reihenfolge der Kommandos — Little-Endian, nicht Big-Endian
+## 2. AES unlock — confirmed, the `encrypt` variant
 
-**Das ist der zentrale Fund und er widerspricht dem aktuellen Code.**
+The sequence from the document, implemented exactly and accepted:
 
-`const.py` definiert die Opcodes Big-Endian:
+1. **read** the 16 byte challenge from `33323032-…`
+2. **encrypt** it with AES-128-ECB and the vendor key
+3. **write** the result back to the same characteristic
+
+Measured immediately after the unlock:
+
+```
+Unlocked.
+Status: BUSY=0 ERR=0 (no error), battery: 2947 mV
+```
+
+`ERR=0` — not `5` (`unlock_failed`). **98 consecutive command writes** were
+then accepted without the label dropping the connection.
+
+**Conclusion:** encrypting the challenge is correct. The alternatives that
+used to be kept around (`decrypt`, the reversed variants, a plain echo) are
+not needed, and neither is a sweep to choose between them. Skipping the
+challenge altogether — encrypting 16 zero bytes, as the pre-HACS prototype
+did — is definitely wrong.
+
+---
+
+## 3. ⚠️ Command byte order — little endian, not big endian
+
+**This is the central finding and it contradicted the code at the time.**
+
+`const.py` defined the opcodes big endian:
 
 ```python
 CMD_IMAGE_STORE: Final = b"\xa5\x00"
@@ -99,256 +96,253 @@ CMD_IMAGE_REFRESH_RAW: Final = b"\xa5\x01"
 CMD_CLEAR: Final = b"\xa5\x04"
 ```
 
-Am Gerät funktioniert hat dagegen **Little-Endian**:
+What actually worked on the device was **little endian**:
 
-| Kommando | Gesendete Bytes | Ergebnis |
+| Command | Bytes sent | Result |
 |---|---|---|
-| `0xA500` Bilddaten speichern | `00 a5` + Pointer 4B LE + Daten | akzeptiert, 98×|
-| `0xA501` unkomprimiert auffrischen | `01 a5` + Größe 4B LE | Panel zeichnet neu |
+| `0xA500` store image data | `00 a5` + pointer 4B LE + data | accepted, 98× |
+| `0xA501` refresh uncompressed | `01 a5` + size 4B LE | the panel redraws |
 
-Belegt durch **drei** unabhängige, vollständige Übertragungen, nach denen sich
-das Display jeweils sichtbar geändert hat:
+Demonstrated by **three** independent, complete transfers, after each of
+which the display visibly changed:
 
-1. 8832 Byte (erster Versuch, noch mit falscher 1-bpp-Annahme) → Schachbrett
-   erschien auf etwa der halben Fläche
-2. 17664 Byte Kalibrierbild → vier Farbbalken über die gesamte Fläche
-3. 17664 Byte Testkarte → vollflächig, korrekt
+1. 8832 bytes (first attempt, still on a wrong 1 bpp assumption) → a
+   checkerboard appeared over roughly half the area
+2. 17664 bytes calibration image → four colour bars over the whole area
+3. 17664 bytes test card → full area, correct
 
-Log der dritten Übertragung:
+Log of the third transfer:
 
 ```
-Verbunden.
-Entsperrt.
-Status: BUSY=0 ERR=0 (kein Fehler), Batterie: 2947 mV
-Sende Bild ...
-  ... 3600/17664 Bytes
-  ... 7200/17664 Bytes
-  ... 10800/17664 Bytes
-  ... 14400/17664 Bytes
-  ... 17664/17664 Bytes
-Gesendet, Display frischt jetzt auf.
+Connected.
+Unlocked.
+Status: BUSY=0 ERR=0 (no error), battery: 2947 mV
+Sending image ...
+  ... 3600/17664 bytes
+  ... 7200/17664 bytes
+  ... 10800/17664 bytes
+  ... 14400/17664 bytes
+  ... 17664/17664 bytes
+Sent, the display is refreshing now.
 ```
 
-### Warum die bisherige Gegenthese vermutlich ein Messartefakt ist
+### Why the earlier counter-claim was a measurement artefact
 
-`protocol.py` stuft Little-Endian aktiv als widerlegt ein:
+`protocol.py` had actively classified little endian as disproven:
 
 ```python
 bytes((0x04, 0xA5)),  # 3.7, little endian opcode - known rejected
 ```
 
-Diese Einstufung entstand im `clear_screen_candidates()`-Sweep. Dort steht
-`a5 04` an **erster** und `04 a5` an **vorletzter** Stelle. Laut der eigenen
-Dokumentation in `async_command_sweep` entzieht ein abgelehntes Kommando die
-Autorisierung (ATT-Fehler 0x08) und nimmt die Verbindung mit. Ein früher
-Kandidat vergiftet also alle folgenden — `04 a5` wurde damit nie auf einer
-sauberen Verbindung getestet.
+That verdict came out of the `clear_screen_candidates()` sweep, where
+`a5 04` ran **first** and `04 a5` came later on the same connection. As the
+integration's own documentation of `async_command_sweep` said, a rejected
+command revokes authorisation (ATT error 0x08) and takes the connection with
+it. An early candidate therefore poisons every one after it — `04 a5` was
+never tested on a clean link.
 
-### Was ausdrücklich **nicht** gemessen wurde
+### What was explicitly **not** measured here
 
-`a5 04` bzw. `04 a5` für **Clear Screen** wurden nicht getestet. Verifiziert ist
-Little-Endian ausschließlich für `0xA500` und `0xA501`. Der saubere
-Gegenbeweis wäre ein A/B-Test beider Schreibweisen, **jeweils auf einer eigenen,
-frisch aufgebauten Verbindung**.
+`a5 04` versus `04 a5` for **clear screen**. Little endian was verified only
+for `0xA500` and `0xA501` in this run. Section 10 closes that gap.
 
 ---
 
-## 4. Bildformat und Palette — bestätigt und jetzt belegt
+## 4. Image format and palette — confirmed and now demonstrated
 
-`imaging.py` `_pack_bwry()` mit `bit_order="msb"` ist **exakt richtig**:
+`_pack_bwry()` in `imaging.py` with MSB-first ordering is **exactly right**:
 
-- **2 Bit pro Pixel**, 4 Pixel pro Byte, **MSB zuerst**, zeilenweise (row-major)
-- 184 × 384 → 46 Byte/Zeile → **17664 Byte** für ein Vollbild
+- **2 bits per pixel**, 4 pixels per byte, **MSB first**, row-major
+- 184 × 384 → 46 bytes per row → **17664 bytes** for a full screen
 
-Die Palettenreihenfolge in `BWRY_PALETTE` stimmt ebenfalls. Gemessen mit einem
-Kalibrierbild aus vier gleich hohen Bändern, jedes mit einem konstanten
-2-Bit-Code gefüllt:
+The palette order is right too. Measured with a calibration image of four
+equally tall bands, each filled with one constant 2 bit code:
 
-| Band (oben → unten) | Code | Bytewert | Angezeigte Farbe |
+| Band (top → bottom) | Code | Byte value | Colour displayed |
 |---|---|---|---|
-| 1 | `00` | `0x00` | **Schwarz** |
-| 2 | `01` | `0x55` | **Weiß** |
-| 3 | `10` | `0xAA` | **Gelb** |
-| 4 | `11` | `0xFF` | **Rot** |
+| 1 | `00` | `0x00` | **black** |
+| 2 | `01` | `0x55` | **white** |
+| 3 | `10` | `0xAA` | **yellow** |
+| 4 | `11` | `0xFF` | **red** |
 
-Das entspricht `BWRY_PALETTE = [schwarz, weiß, gelb, rot]` Index für Index.
-Der Kommentar *"the index is the two bit code written to the panel; the order is
-unverified"* kann entfallen — die Reihenfolge ist verifiziert.
+That matches `BWRY_PALETTE = [black, white, yellow, red]` index for index.
 
-Gegenprobe: Der erste Versuch mit 1 bpp erzeugte Läufe aus je 20 gleichen Bits.
-Paarweise als 2-Bit-Codes gelesen ergibt das abwechselnd `00` und `11` — auf dem
-Display erschien exakt Schwarz/Rot, und nur die halbe Fläche wurde beschrieben,
-weil 8832 Byte genau die Hälfte von 17664 sind.
+Cross-check: the first attempt at 1 bpp produced runs of 20 identical bits.
+Read pairwise as 2 bit codes that alternates `00` and `11` — and the display
+showed exactly black and red, over only half the area, because 8832 bytes is
+precisely half of 17664.
 
-`bwry_packed` sollte damit fester Default für BWRY-Panels sein; `bwry_planes`
-und `lsb` sind für dieses Modell widerlegt.
+Packed 2 bpp is therefore the format for BWRY panels; separate bit planes
+and LSB-first ordering are ruled out for this model.
 
 ---
 
-## 5. Advertisement — bestätigt
+## 5. Advertisement — confirmed
 
-Live aufgezeichnet:
+Captured live:
 
 ```
 66:66:17:40:27:77  name=WL17402777  rssi=-53
 mfg={48042: b'0\x00\x00\x0e\x030\x02\x01\x0b\x8b'}
 ```
 
-- Company-ID **48042 = 0xBBAA** — der Matcher in `manifest.json` greift korrekt
-- Payload **10 Byte**: `30 00 00 0e 03 30 02 01 0b 8b`, passt zu `ADV_PAYLOAD_LEN`
-- Batterie big-endian ab Offset 8: `0x0b8b` = **2955 mV**
+- Company ID **48042 = 0xBBAA** — the matcher in `manifest.json` is correct
+- Payload is **10 bytes**: `30 00 00 0e 03 30 02 01 0b 8b`, matching
+  `ADV_PAYLOAD_LEN`
+- Battery big endian at offset 8: `0x0b8b` = **2955 mV**
 
-Gegenprobe über GATT in derselben Sitzung: **2947 mV**. Die gemischte
-Byte-Reihenfolge (Versionsfelder little-endian, Batterie big-endian), die
-`parse_advertisement()` implementiert, ist damit bestätigt.
+Cross-check over GATT in the same session: **2947 mV**. The mixed byte order
+that `parse_advertisement()` implements — version fields little endian,
+battery big endian — is thereby confirmed.
 
 ---
 
-## 6. Advertising-Verhalten — die eigentliche Verbindungshürde
+## 6. Advertising behaviour — the real connection hurdle
 
-Das Label advertised **sehr selten und unregelmäßig**. Gemessen mit
-kontinuierlichem aktivem Scan:
+The label advertises **rarely and irregularly**. Measured with a continuous
+active scan:
 
-| Lauf | Scan-Fenster | Ergebnis |
+| Run | Scan window | Result |
 |---|---|---|
-| A | 10 s | nicht gefunden |
-| B | 12 s | nicht gefunden |
-| C | 20 s gezielt | nicht gefunden |
-| D | 45 s (Callback) | **gefunden** |
-| E | 3 × 30 s | erst im 3. Versuch gefunden |
-| F | 4 × 30 s (nach einem Transfer) | **gar nicht gefunden** (>120 s) |
-| G | 3 × 45 s | erst im 3. Versuch gefunden |
+| A | 10 s | not found |
+| B | 12 s | not found |
+| C | 20 s, targeted | not found |
+| D | 45 s (callback) | **found** |
+| E | 3 × 30 s | found only on the third try |
+| F | 4 × 30 s (after a transfer) | **not found at all** (>120 s) |
+| G | 3 × 45 s | found only on the third try |
 
-Ein einzelnes Scan-Fenster von 10–30 s findet das Label also **regelmäßig
-nicht**, obwohl es 20 cm entfernt liegt und mit −53 dBm sendet.
+A single scan window of 10–30 s therefore **regularly misses** the label,
+even at 20 cm and −53 dBm.
 
-Verbinden ist nur im kurzen Fenster rund um ein Advertisement möglich. Ein
-**verbundenes** BLE-Gerät sendet zudem gar keine Advertisements mehr — solange
-irgendetwas die Verbindung hält, ist das Label für alles andere unsichtbar.
-
----
-
-## 7. Warum Home Assistant derzeit nicht verbindet
-
-Nach Wichtigkeit geordnet:
-
-### 7.1 Konkurrenz um den einzigen Verbindungsslot
-
-`DEFAULT_LINGER_S = 60` hält die Verbindung nach jedem Kommando 60 s offen und
-verwendet sie wieder. Das ist für Kommando-Bursts sinnvoll, macht das Label
-aber für diese Zeit unsichtbar. Beobachtet wurde beides: Das Label war
-unauffindbar, solange etwas anderes verbunden war, und war direkt nach unseren
-Transfers minutenlang wieder weg (Lauf F oben).
-
-**Für Diagnosen gilt: immer nur *ein* Client gleichzeitig.**
-
-### 7.2 `ADVERTISEMENT_WAIT_S = 180` ist grenzwertig
-
-`device.py:70`. Lauf F oben blieb über 120 s erfolglos, Läufe E und G brauchten
-je rund 90–135 s. 180 s liegen damit knapp über dem Beobachteten — ein
-schlafendes Label lässt `_async_wait_for_connectable()` regelmäßig in den
-`HomeAssistantError` laufen.
-
-### 7.3 Ein falscher Opcode sieht aus wie ein Verbindungsfehler
-
-Da eine Ablehnung die Autorisierung entzieht und die Verbindung mitnimmt,
-äußert sich Abschnitt 3 nicht als saubere Protokollmeldung, sondern als
-Abbruch bzw. als "Characteristic not found" beim nächsten Zugriff. Die
-README-Beobachtung *"Testbild ~75 Chunks, dann Characteristic not found"* passt
-zu diesem Muster.
-
-### 7.4 Chunk-Größe aus der Fallback-MTU
-
-`_chunk_size()` in `protocol.py` rechnet ohne bekannte MTU mit
-`_FALLBACK_MTU = 23` → `23 − 3 − 6` = **14 Byte Nutzdaten pro Write**. Ein
-Vollbild braucht damit ~1262 Writes; über einen Proxy dauert das Minuten und
-ist entsprechend anfällig.
-
-Zum Vergleich: Die verifizierten Läufe nutzten **180 Byte Nutzdaten pro Write**
-(Frame also 186 Byte) mit `response=True` und liefen ohne einen einzigen
-Fehlversuch durch.
+Connecting is only possible in the short window around an advertisement. A
+**connected** BLE device also stops advertising entirely — as long as
+anything holds the connection, the label is invisible to everything else.
 
 ---
 
-## 8. Empfohlene Änderungen
+## 7. Why Home Assistant was not connecting
 
-Bewusst **nicht** in diesem PR umgesetzt — dieser PR dokumentiert nur.
+In order of importance:
 
-> **Nachtrag:** Alle sieben sind in **0.19.0** umgesetzt. Der Kommando-Sweep
-> (#2) bleibt erhalten, weil Löschen als einziges Kommando in keiner
-> Byte-Reihenfolge gemessen ist; seine Kandidatenliste führt jetzt
-> Little-Endian an. Der Unlock-Sweep (#7) ist samt Option entfernt.
+### 7.1 Competition for the single connection slot
 
-| # | Datei | Änderung | Belegt durch |
+A linger of 60 s held the connection open after every command and reused it.
+That is sensible for bursts of commands, but it makes the label invisible
+for that time. Both were observed: the label was unfindable while something
+else was connected, and it was gone for minutes right after our transfers
+(run F above).
+
+**For diagnostics: only ever one client at a time.**
+
+### 7.2 A 180 s advertisement wait was marginal
+
+Run F above stayed empty for over 120 s, and runs E and G took roughly
+90–135 s each. 180 s sat right on top of what was observed, so a sleeping
+label regularly ran the wait into an error.
+
+### 7.3 A wrong opcode looks like a connection failure
+
+Because a rejection revokes authorisation and takes the connection with it,
+section 3 does not surface as a clean protocol error but as an abort, or as
+"characteristic not found" on the next access. The earlier README
+observation — "test image, ~75 chunks, then characteristic not found" — fits
+that pattern.
+
+### 7.4 Chunk size from the fallback MTU
+
+`_chunk_size()` in `protocol.py` used to assume an MTU of 23 when none was
+known, giving `23 − 3 − 6` = **14 payload bytes per write**. A full screen
+then needs ~1262 writes, which over a proxy takes minutes and is
+correspondingly fragile.
+
+For comparison: the verified runs used **180 payload bytes per write**
+(186 byte frames) with `response=True` and went through without a single
+failed attempt.
+
+---
+
+## 8. Recommended changes
+
+Deliberately **not** implemented in the pull request that added this
+document — it only documented.
+
+| # | File | Change | Evidence |
 |---|---|---|---|
-| 1 | `const.py` | Opcodes auf Little-Endian (`b"\x00\xa5"`, `b"\x01\xa5"`, …) | Abschn. 3 |
-| 2 | `protocol.py` | `known rejected`-Kommentar entfernen, Sweep-Reihenfolge umdrehen | Abschn. 3 |
-| 3 | `protocol.py` | `_FALLBACK_MTU`-Ableitung ersetzen, größere Chunks | Abschn. 7.4 |
-| 4 | `imaging.py` | `bwry_packed` + `msb` als fester Default, Palette als verifiziert markieren | Abschn. 4 |
-| 5 | `const.py` | `WRITE_MODE_NO_RESPONSE` entfernen oder als nicht unterstützt kennzeichnen | Abschn. 1 |
-| 6 | `device.py` | `ADVERTISEMENT_WAIT_S` erhöhen, `DEFAULT_LINGER_S` senken | Abschn. 6, 7.1, 7.2 |
-| 7 | `protocol.py` | `UNLOCK_VARIANTS` auf `encrypt` reduzieren, Sweep entfernen | Abschn. 2 |
+| 1 | `const.py` | Opcodes to little endian (`b"\x00\xa5"`, `b"\x01\xa5"`, …) | sec. 3 |
+| 2 | `protocol.py` | Drop the `known rejected` comment, reverse the sweep order | sec. 3 |
+| 3 | `protocol.py` | Replace the `_FALLBACK_MTU` derivation, larger chunks | sec. 7.4 |
+| 4 | `imaging.py` | Packed 2 bpp + MSB as the fixed default, palette marked verified | sec. 4 |
+| 5 | `const.py` | Remove the write-without-response mode or mark it unsupported | sec. 1 |
+| 6 | `device.py` | Raise the advertisement wait, lower the linger | sec. 6, 7.1, 7.2 |
+| 7 | `protocol.py` | Reduce the unlock to `encrypt`, drop the sweep | sec. 2 |
 
-**Reihenfolge:** Zuerst #1 (ohne die richtige Byte-Reihenfolge lässt sich nichts
-anderes sinnvoll testen), dann #3, dann der Rest.
+**Order:** #1 first — without the right byte order nothing else can be
+tested meaningfully — then #3, then the rest.
 
-## 9. Offene Punkte
+> **Addendum:** all seven were implemented in **0.19.0**. The command sweep
+> (#2) was kept at the time because clear screen had not been measured in
+> either byte order; section 10 closed that, and the sweep was removed in
+> **0.23.0** together with the rest of the investigation scaffolding.
 
-*Stand des ursprünglichen Messlaufs. Was davon Abschnitt 10 erledigt hat, ist
-dort vermerkt.*
+## 9. Open points
 
-- ~~**Clear Screen** (`0xA504`) wurde in keiner Byte-Reihenfolge getestet.~~
-  Erledigt in Abschnitt 10.
-- **`0xA502`** (blockkomprimiert) und die Kompression selbst sind unberührt —
-  das Herstellerdokument beschreibt das Verfahren nicht.
-- **Multi-Screen** (`0xA503` / `0xA509`, Slot-Header `PIC0x\0`) ungetestet.
-- ~~**RGB-LED** (`0xA508`) ungetestet.~~ Erledigt in Abschnitt 10.
-- ~~Alle Messungen stammen von **einem** Exemplar über einen **direkten**
-  Adapter.~~ Abschnitt 10 deckt den Proxy-Pfad ab.
+*State as of the original measurement run. What section 10 closed is marked
+here.*
+
+- ~~**Clear screen** (`0xA504`) was not tested in either byte order.~~
+  Closed in section 10.
+- **`0xA502`** (block compressed) and the compression itself are untouched —
+  the vendor document does not describe the scheme.
+- **Multi-screen** (`0xA503` / `0xA509`, slot header `PIC0x\0`) untested.
+- ~~**RGB LED** (`0xA508`) untested.~~ Closed in section 10.
+- ~~All measurements come from **one** unit over a **direct** adapter.~~
+  Section 10 covers the proxy path.
 
 ---
 
-## 10. Nachtrag: derselbe Stand über Home Assistant
+## 10. Addendum: the same state through Home Assistant
 
-Zweiter Messlauf, **2026-09-06**, nach der Umsetzung in 0.19.0. Anderer
-Aufbau als oben und damit ein eigenständiger Beleg:
+Second measurement run, **2026-09-06**, after the changes in 0.19.0. A
+different setup, and therefore independent evidence:
 
 | | |
 |---|---|
-| Weg | Home Assistant → **ESPHome-Bluetooth-Proxy** → Label |
-| Software | diese Integration, v0.19.0, kein Hilfsskript |
-| Beleg | Foto des Panels, Rückmeldung zu LED und Löschen |
+| Path | Home Assistant → **ESPHome Bluetooth proxy** → label |
+| Software | this integration, v0.19.0, no helper script |
+| Evidence | photograph of the panel, plus reports on the LED and clear |
 
-### Was damit belegt ist
+### What this establishes
 
-**Der Bildpfad funktioniert durch die Integration hindurch.** Auf dem Panel
-steht das `diagnostic`-Muster aus `patterns.py`, gerendert von `imaging.py`:
-Rahmen, Eckkeil, die vier Farbblöcke, zwei 1-Pixel-Gitter und die
-Beschriftung `ESL 184x384`. Das Muster ist absichtlich diagnostisch gebaut,
-also lässt sich einiges direkt ablesen:
+**The image path works through the integration end to end.** The panel
+showed the `diagnostic` pattern from `patterns.py`, rendered by
+`imaging.py`: frame, the four colour blocks, two one-pixel gratings and the
+label `ESL 184x384`. The pattern is deliberately built to be diagnostic, so
+several things can be read straight off it:
 
-| Beobachtung im Foto | Was sie ausschließt |
+| Observed in the photograph | What it rules out |
 |---|---|
-| Rahmen umlaufend geschlossen | Breite/Höhe nicht vertauscht, ganze Fläche adressiert |
-| Blöcke in der Reihenfolge Schwarz, Rot, Gelb, Weiß | Palettenzuordnung stimmt (Gegenprobe zu Abschn. 4) |
-| **waagerechtes** 1-Pixel-Gitter scharf, kein Verwischen | Zeilenlänge 46 Byte stimmt |
-| **senkrechtes** 1-Pixel-Gitter scharf, kein Versatz | Bitreihenfolge MSB-zuerst stimmt |
+| Frame closed all the way round | Width/height not swapped, whole area addressed |
+| Blocks in the order black, red, yellow, white | The palette mapping is right (cross-check on sec. 4) |
+| **Horizontal** one-pixel grating sharp, no smearing | The row length of 46 bytes is right |
+| **Vertical** one-pixel grating sharp, no offset | The MSB-first bit order is right |
 
-Ein einzelner Pixelfehler wäre in genau diesen Gittern sichtbar und sonst
-nirgends. Beide sind sauber — das bestätigt `_pack_bwry()` unabhängig vom
-Referenzskript aus Abschnitt 4.
+A single pixel error would be visible in exactly those gratings and nowhere
+else. Both are clean, which confirms `_pack_bwry()` independently of the
+reference script in section 4.
 
-### `0xA504` und `0xA508`
+### `0xA504` and `0xA508`
 
-Beide wirken, in Little-Endian:
+Both take effect, in little endian:
 
-- **Löschen** `04 a5` — die letzte offene Frage zur Byte-Reihenfolge. Das
-  Muster in Abschnitt 3 gilt damit für alle vier gemessenen Opcodes.
-- **RGB-LED** `08 a5` + R + G + B + on_ms 2B + off_ms 2B + work_ms 4B, alle
-  Zeitfelder Little-Endian. Das 13-Byte-Layout war bis hier eine Annahme.
+- **Clear screen** `04 a5` — the last open question about byte order. The
+  pattern in section 3 therefore holds for all four measured opcodes.
+- **RGB LED** `08 a5` + R + G + B + on_ms 2B + off_ms 2B + work_ms 4B, all
+  timing fields little endian. The 13 byte layout had been an assumption
+  until this point.
 
-### Und der Proxy-Vorbehalt ist ausgeräumt
+### And the proxy caveat is settled
 
-Abschnitt 9 hielt fest, dass alle Messungen über einen direkten Adapter
-liefen und der Proxy besonders bei MTU und Timing abweichen könnte. Tut er
-nicht: dieselben 180-Byte-Scheiben, dieselben Frames, dasselbe Ergebnis.
+Section 9 recorded that every measurement had gone over a direct adapter and
+that a proxy might differ, especially on MTU and timing. It does not: the
+same 180 byte slices, the same frames, the same result.

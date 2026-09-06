@@ -1,18 +1,18 @@
 """
-Bibliothek fuer das BLE-35BWRY ESL (Zhsunyco), 184x384, 4 Farben (Black/White/Red/Yellow).
+Library for the BLE-35BWRY ESL (Zhsunyco), 184x384, 4 colours (black/white/red/yellow).
 
-Protokoll (Hersteller-PDF "BLE Display API" + eigene Verifikation am Geraet):
+Protocol (vendor PDF "BLE Display API" plus our own verification on the device):
 
-  Ein einziger GATT-Service 30323032-4C53-4545-4C42-4B4E494C4F57 mit 5 Characteristics:
-    33323032...  Security   (read/write)  - AES-128-ECB Challenge-Response
-    31323032...  Command    (read/write)  - alle CMDs
+  A single GATT service 30323032-4C53-4545-4C42-4B4E494C4F57 with 5 characteristics:
+    33323032...  Security   (read/write)  - AES-128-ECB challenge/response
+    31323032...  Command    (read/write)  - every command
     32323032...  Version    (read/notify)
     35323032...  Battery    (read/notify)
-    34323032...  Status     (read/notify) - Byte 0 BUSY, Byte 1 ERR
+    34323032...  Status     (read/notify) - byte 0 BUSY, byte 1 ERR
 
-  Bildformat (am Geraet verifiziert):
-    2 Bit pro Pixel, MSB zuerst, zeilenweise (row-major), 184x384 = 17664 Bytes
-    Farbcodes: 00=Schwarz, 01=Weiss, 10=Gelb, 11=Rot
+  Image format (verified on the device):
+    2 bits per pixel, MSB first, row-major, 184x384 = 17664 bytes
+    Colour codes: 00=black, 01=white, 10=yellow, 11=red
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from Crypto.Cipher import AES
 from PIL import Image
 
 # ---------------------------------------------------------------------------
-# Protokoll-Konstanten
+# Protocol constants
 # ---------------------------------------------------------------------------
 
 UUID_SEC_CHAR = "33323032-4C53-4545-4C42-4B4E494C4F57"
@@ -54,7 +54,7 @@ IMAGE_BYTES = BYTES_PER_ROW * HEIGHT             # 17664
 
 CHUNK_SIZE = 180
 
-# Farbcodes -> Referenz-RGB fuer Nearest-Color-Matching
+# Colour codes -> reference RGB for nearest-colour matching
 BLACK, WHITE, YELLOW, RED = 0b00, 0b01, 0b10, 0b11
 
 PALETTE = {
@@ -65,12 +65,12 @@ PALETTE = {
 }
 
 ERR_TEXT = {
-    0: "kein Fehler",
-    1: "EPD Initialisierungsfehler",
-    2: "EPD Schreibfehler",
-    3: "Dekompressionsfehler",
-    4: "OTA-Fehler",
-    5: "Unlock fehlgeschlagen",
+    0: "no error",
+    1: "EPD initialisation error",
+    2: "EPD write error",
+    3: "decompression error",
+    4: "OTA error",
+    5: "unlock failed",
 }
 
 
@@ -79,21 +79,21 @@ ERR_TEXT = {
 # ---------------------------------------------------------------------------
 
 async def find_device(mac: str, scan_timeout: float = 30.0, retries: int = 4):
-    """Das Tag advertised nur sporadisch, daher mehrere Scan-Versuche."""
+    """The tag advertises only sporadically, hence several scan attempts."""
     for attempt in range(1, retries + 1):
-        print(f"Suche {mac} (Versuch {attempt}/{retries}, bis {scan_timeout:.0f}s) ...")
+        print(f"Looking for {mac} (attempt {attempt}/{retries}, up to {scan_timeout:.0f}s) ...")
         device = await BleakScanner.find_device_by_address(mac, timeout=scan_timeout)
         if device is not None:
-            print(f"  gefunden: {device.address} ({device.name})")
+            print(f"  found: {device.address} ({device.name})")
             return device
     return None
 
 
 async def unlock(client: BleakClient) -> None:
-    """16 Byte Zufalls-Challenge lesen, AES-128-ECB verschluesseln, zurueckschreiben."""
+    """Read the 16 byte random challenge, encrypt with AES-128-ECB, write back."""
     challenge = await client.read_gatt_char(UUID_SEC_CHAR)
     if len(challenge) != 16:
-        raise RuntimeError(f"Unerwartete Challenge-Laenge: {len(challenge)}")
+        raise RuntimeError(f"Unexpected challenge length: {len(challenge)}")
     cipher = AES.new(AES_KEY, AES.MODE_ECB)
     await client.write_gatt_char(UUID_SEC_CHAR, cipher.encrypt(challenge), response=True)
 
@@ -139,9 +139,9 @@ async def set_rgb(client: BleakClient, r: int, g: int, b: int,
 
 
 async def send_image_bytes(client: BleakClient, bitmap: bytes, progress: bool = True) -> None:
-    """CMD 0xA500 (Daten in Chunks) + CMD 0xA501 (Refresh)."""
+    """CMD 0xA500 (data in chunks) + CMD 0xA501 (refresh)."""
     if len(bitmap) != IMAGE_BYTES:
-        raise ValueError(f"Bitmap muss {IMAGE_BYTES} Bytes haben, ist {len(bitmap)}")
+        raise ValueError(f"Bitmap must be {IMAGE_BYTES} bytes, is {len(bitmap)}")
 
     offset = 0
     while offset < len(bitmap):
@@ -159,7 +159,7 @@ async def send_image_bytes(client: BleakClient, bitmap: bytes, progress: bool = 
 
 
 # ---------------------------------------------------------------------------
-# Bildkodierung
+# Image encoding
 # ---------------------------------------------------------------------------
 
 def _nearest_code(r: int, g: int, b: int) -> int:
@@ -172,7 +172,7 @@ def _nearest_code(r: int, g: int, b: int) -> int:
 
 
 def quantize(img: Image.Image, dither: bool = True) -> list[int]:
-    """RGB-Bild -> Liste von Farbcodes (0..3), row-major. Optional Floyd-Steinberg."""
+    """RGB image -> list of colour codes (0..3), row-major. Optional Floyd-Steinberg."""
     img = img.convert("RGB")
     if img.size != (WIDTH, HEIGHT):
         img = img.resize((WIDTH, HEIGHT), Image.Resampling.LANCZOS)
@@ -211,7 +211,7 @@ def quantize(img: Image.Image, dither: bool = True) -> list[int]:
 
 
 def pack_codes(codes: Iterable[int]) -> bytes:
-    """Farbcodes (2 Bit) -> gepackte Bytes, MSB zuerst, 4 Pixel pro Byte."""
+    """Colour codes (2 bit) -> packed bytes, MSB first, 4 pixels per byte."""
     out = bytearray()
     byte = 0
     count = 0
