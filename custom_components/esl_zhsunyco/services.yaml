@@ -1,8 +1,11 @@
 set_rgb:
-  target:
-    device:
-      integration: esl_zhsunyco
   fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: esl_zhsunyco
     rgb_color:
       required: true
       example: "[255, 0, 0]"
@@ -37,15 +40,22 @@ set_rgb:
           mode: box
 
 clear_screen:
-  target:
-    device:
-      integration: esl_zhsunyco
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: esl_zhsunyco
 
 set_image:
-  target:
-    device:
-      integration: esl_zhsunyco
   fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: esl_zhsunyco
     path:
       required: true
       example: /config/www/label.png
@@ -86,15 +96,22 @@ set_image:
         boolean:
 
 debug_probe:
-  target:
-    device:
-      integration: esl_zhsunyco
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: esl_zhsunyco
 
 debug_command:
-  target:
-    device:
-      integration: esl_zhsunyco
   fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: esl_zhsunyco
     payload:
       required: true
       example: "a5 04"
@@ -107,10 +124,13 @@ debug_command:
         boolean:
 
 send_test_pattern:
-  target:
-    device:
-      integration: esl_zhsunyco
   fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: esl_zhsunyco
     pattern:
       required: false
       default: diagnostic
@@ -161,10 +181,13 @@ send_test_pattern:
         boolean:
 
 debug_command_sweep:
-  target:
-    device:
-      integration: esl_zhsunyco
   fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: esl_zhsunyco
     preset:
       required: false
       default: clear_screen

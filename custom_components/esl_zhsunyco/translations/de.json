@@ -107,6 +107,10 @@
       "name": "RGB setzen",
       "description": "Steuert die RGB-LED des Labels an (Kommando 0xA508).",
       "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "An welches ESL das gehen soll."
+        },
         "rgb_color": {
           "name": "Farbe",
           "description": "Anzuzeigende RGB-Farbe."
@@ -127,12 +131,22 @@
     },
     "clear_screen": {
       "name": "Bildschirm löschen",
-      "description": "Löscht das E-Ink-Panel (Kommando 0xA504)."
+      "description": "Löscht das E-Ink-Panel (Kommando 0xA504).",
+      "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "An welches ESL das gehen soll."
+        }
+      }
     },
     "set_image": {
       "name": "Bild setzen",
       "description": "Rendert eine Bilddatei und überträgt sie auf das Panel. Experimentell: Das Pixelformat ist vom Hersteller nicht dokumentiert.",
       "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "An welches ESL das gehen soll."
+        },
         "path": {
           "name": "Dateipfad",
           "description": "Pfad zum Bild. Muss in einem erlaubten Verzeichnis liegen."
@@ -165,12 +179,22 @@
     },
     "debug_probe": {
       "name": "Diagnose-Probe",
-      "description": "Verbindet sich, listet die GATT-Tabelle auf, liest alle Charakteristiken und zeigt das Ergebnis als Benachrichtigung. Für die Fehlersuche."
+      "description": "Verbindet sich, listet die GATT-Tabelle auf, liest alle Charakteristiken und zeigt das Ergebnis als Benachrichtigung. Für die Fehlersuche.",
+      "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "An welches ESL das gehen soll."
+        }
+      }
     },
     "debug_command": {
       "name": "Roh-Kommando",
       "description": "Schreibt rohe Hex-Bytes auf die Command-Charakteristik. Zum Ermitteln einer Kodierung, die die Hersteller-Doku offenlässt.",
       "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "An welches ESL das gehen soll."
+        },
         "payload": {
           "name": "Nutzdaten",
           "description": "Kommando-Bytes als Hex, zum Beispiel 'a5 04'."
@@ -185,6 +209,10 @@
       "name": "Testbild senden",
       "description": "Überträgt ein eingebautes Muster, damit sich das Panel ohne Bilddatei prüfen lässt. Das Diagnose-Muster zeigt, welcher Teil der Kodierung falsch ist.",
       "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "An welches ESL das gehen soll."
+        },
         "pattern": {
           "name": "Muster",
           "description": "Welches eingebaute Muster gesendet wird."
@@ -219,6 +247,10 @@
       "name": "Kommando-Varianten testen",
       "description": "Sendet mehrere Kodierungen eines Kommandos in einer einzigen Verbindung und meldet, wie die Status-Charakteristik jeweils reagiert hat. Läuft im Hintergrund und meldet sich über eine persistente Benachrichtigung; der Aufruf selbst kehrt sofort zurück, denn das Aufwecken des Labels dauert. Die Verbindung wird nur nach einem abgelehnten Kandidaten getrennt.",
       "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "An welches ESL das gehen soll."
+        },
         "opcode": {
           "name": "Opcode",
           "description": "Zu testendes Kommando als Hex. Die Varianten werden daraus abgeleitet: Big Endian, Little Endian und mit angehängten Längenbytes."

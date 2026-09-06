@@ -107,6 +107,10 @@
       "name": "Set RGB",
       "description": "Drives the label's RGB LED (command 0xA508).",
       "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "The ESL to send this to."
+        },
         "rgb_color": {
           "name": "Colour",
           "description": "RGB colour to show."
@@ -127,12 +131,22 @@
     },
     "clear_screen": {
       "name": "Clear screen",
-      "description": "Clears the e-ink panel (command 0xA504)."
+      "description": "Clears the e-ink panel (command 0xA504).",
+      "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "The ESL to send this to."
+        }
+      }
     },
     "set_image": {
       "name": "Set image",
       "description": "Renders an image file and uploads it to the panel. Experimental: the pixel format is not documented by the vendor.",
       "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "The ESL to send this to."
+        },
         "path": {
           "name": "File path",
           "description": "Path to the image. Must be inside an allowed directory."
@@ -165,12 +179,22 @@
     },
     "debug_probe": {
       "name": "Debug probe",
-      "description": "Connects, enumerates the GATT table and reads every characteristic, then shows the result as a notification. Use this when something does not work."
+      "description": "Connects, enumerates the GATT table and reads every characteristic, then shows the result as a notification. Use this when something does not work.",
+      "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "The ESL to send this to."
+        }
+      }
     },
     "debug_command": {
       "name": "Debug command",
       "description": "Writes raw hex bytes to the command characteristic. For working out an encoding the vendor document leaves open.",
       "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "The ESL to send this to."
+        },
         "payload": {
           "name": "Payload",
           "description": "Command bytes as hex, for example 'a5 04'."
@@ -185,6 +209,10 @@
       "name": "Send test pattern",
       "description": "Uploads a built-in pattern so the panel can be verified without an image file. The diagnostic pattern shows which part of the encoding is wrong.",
       "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "The ESL to send this to."
+        },
         "pattern": {
           "name": "Pattern",
           "description": "Which built-in pattern to send."
@@ -219,6 +247,10 @@
       "name": "Debug command sweep",
       "description": "Sends several encodings of one command in a single connection and reports how the status characteristic reacted to each. Waking the label is the slow part, so this tests every candidate in one go.",
       "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "The ESL to send this to."
+        },
         "opcode": {
           "name": "Opcode",
           "description": "Command to try, as hex. Variants are derived from it: big endian, little endian, and with trailing length bytes."

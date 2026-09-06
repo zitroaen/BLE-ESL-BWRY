@@ -23,6 +23,12 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # Two of HACS's checks are about the GitHub repository itself, not
+          # about this code: it wants a repository description and topics.
+          # Set both in the repository settings and delete this line - they
+          # are required only for listing in the HACS default store, and an
+          # install by custom repository works without them.
+          ignore: topics description
 
   lint:
     name: ruff
