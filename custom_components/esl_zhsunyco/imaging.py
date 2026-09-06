@@ -153,10 +153,8 @@ def _bwry_codes(image, dither: bool) -> list[int]:
     return [pixels[x, y] & 0x03 for y in range(height) for x in range(width)]
 
 
-def _pack_bwry(image, dither: bool, bit_order: str = "msb") -> bytes:
-    """2 bits per pixel, four pixels per byte, rows padded to whole bytes."""
-    width, height = image.size
-    codes = _bwry_codes(image, dither)
+def _pack_codes(codes: list[int], width: int, height: int, bit_order: str) -> bytes:
+    """Pack two bit codes, four per byte, rows padded to whole bytes."""
     msb = bit_order == "msb"
 
     out = bytearray()
@@ -171,6 +169,12 @@ def _pack_bwry(image, dither: bool, bit_order: str = "msb") -> bytes:
                 byte |= code << shift
             out.append(byte)
     return bytes(out)
+
+
+def _pack_bwry(image, dither: bool, bit_order: str = "msb") -> bytes:
+    """2 bits per pixel, four pixels per byte, rows padded to whole bytes."""
+    width, height = image.size
+    return _pack_codes(_bwry_codes(image, dither), width, height, bit_order)
 
 
 def _pack_bwry_planes(image, dither: bool, bit_order: str = "msb") -> bytes:
@@ -196,7 +200,42 @@ def _resolve_encoding(request: ImageRequest) -> str:
     return "bwry_packed" if request.pixel_format == "bwry" else "mono"
 
 
-def render_image(request: ImageRequest, width: int, height: int) -> bytes:
+def _preview_png(codes: list[int], width: int, height: int, mono: bool) -> bytes:
+    """Draw what the panel will show, from the pixels that were packed.
+
+    Built from the quantised codes rather than from the source image, so
+    the preview cannot drift from what actually goes on the wire: dithering
+    noise, palette snapping and letterboxing are all already baked in. If
+    the preview looks wrong, the label looks wrong the same way.
+    """
+    from PIL import Image as PILImage
+
+    if mono:
+        palette = [(0, 0, 0), (255, 255, 255)]
+        if MONO_BLACK_BIT == 1:
+            palette.reverse()
+    else:
+        palette = BWRY_PALETTE
+
+    image = PILImage.new("RGB", (width, height))
+    image.putdata([palette[code] for code in codes])
+    buffer = BytesIO()
+    image.save(buffer, format="PNG", optimize=True)
+    return buffer.getvalue()
+
+
+@dataclass(slots=True)
+class RenderedImage:
+    """The bytes for the panel, plus a picture of what they will look like."""
+
+    payload: bytes
+    preview_png: bytes
+    encoding: str
+    width: int
+    height: int
+
+
+def render_image(request: ImageRequest, width: int, height: int) -> RenderedImage:
     """Render a request into panel-native bytes. Runs in an executor."""
     from PIL import Image as PILImage
 
@@ -214,11 +253,18 @@ def render_image(request: ImageRequest, width: int, height: int) -> bytes:
 
     encoding = _resolve_encoding(request)
     if encoding == "bwry_packed":
-        packed = _pack_bwry(image, request.dither, request.bit_order)
+        codes = _bwry_codes(image, request.dither)
+        packed = _pack_codes(codes, width, height, request.bit_order)
     elif encoding == "bwry_planes":
-        packed = _pack_bwry_planes(image, request.dither, request.bit_order)
+        codes = _bwry_codes(image, request.dither)
+        high = [(code >> 1) & 1 for code in codes]
+        low = [code & 1 for code in codes]
+        packed = _pack_bits(high, width, height, request.bit_order) + _pack_bits(
+            low, width, height, request.bit_order
+        )
     else:
-        packed = _pack_mono(image, request.invert, request.bit_order)
+        codes = _mono_bits(image, request.invert)
+        packed = _pack_bits(codes, width, height, request.bit_order)
 
     _LOGGER.debug(
         "Rendered %dx%d as %s/%s: %d bytes",
@@ -228,4 +274,10 @@ def render_image(request: ImageRequest, width: int, height: int) -> bytes:
         request.bit_order,
         len(packed),
     )
-    return packed
+    return RenderedImage(
+        payload=packed,
+        preview_png=_preview_png(codes, width, height, mono=encoding == "mono"),
+        encoding=encoding,
+        width=width,
+        height=height,
+    )

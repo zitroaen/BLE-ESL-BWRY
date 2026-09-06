@@ -22,6 +22,7 @@ Abschnittsnummer kommentiert.
 | Bildupload `0xA500` / Refresh `0xA501` | Abschn. 3.1–3.2 | ✅ |
 | Refresh komprimiert `0xA502` | Abschn. 3.3 | ⚠️ implementiert, Kompression ungetestet |
 | Testbilder ohne Bilddatei | – | ✅ |
+| Panel-Vorschau als `image`-Entität | – | ✅ |
 | Multi-Screen `0xA503` / `0xA509` | Abschn. 3.9–3.10 | ⚠️ implementiert, ungetestet |
 | OTA `0xA505`–`0xA507` | Abschn. 3.4–3.6 | ❌ bewusst nicht implementiert |
 
@@ -131,6 +132,55 @@ Für die easyTag-Variante gibt es eine eigene Implementierung:
 Die **Diagnose-Probe erkennt beide** und meldet unter `protocol_family`,
 welche das Label tatsächlich spricht. Steht dort `easytag_xor`, ist diese
 Integration die falsche Software für das Gerät.
+
+## Beliebige Bilder senden
+
+`set_image` nimmt einen Dateipfad. Home Assistant lässt nur freigegebene
+Verzeichnisse zu, also einmalig in die `configuration.yaml`:
+
+```yaml
+homeassistant:
+  allowlist_external_dirs:
+    - /config/www/esl
+```
+
+```yaml
+action: esl_zhsunyco.set_image
+data:
+  device_id: <dein Label>
+  path: /config/www/esl/kalender.png
+  dither: true
+```
+
+Um Größe und Farben musst du dich nicht kümmern: das Bild wird auf die
+Panelgröße gebracht, per Floyd-Steinberg auf die vier darstellbaren Farben
+gerastert und in 2 bpp gepackt. Ein Vollbild sind 17664 Byte, also 99
+Chunks — rechne mit etwa einer halben Minute, sobald die Verbindung steht.
+
+Bei Grafiken mit großen einfarbigen Flächen (Text, Tabellen, Kalender)
+liefert `dither: false` meist ein ruhigeres Bild als das Rastern.
+
+### Was das Panel gerade zeigt
+
+Jedes Label hat eine `image`-Entität, die das zuletzt übertragene Bild
+zeigt. Sie wird **aus den gepackten Pixeln** erzeugt, nicht aus der
+Quelldatei — Dithering und Farbreduktion sind darin also genauso zu sehen
+wie auf dem Panel.
+
+```yaml
+type: picture-entity
+entity: image.esl_66_66_17_40_27_77_panel
+```
+
+Zwei bewusste Eigenheiten:
+
+- Sie bleibt **verfügbar**, auch wenn das Label schläft. Was auf dem Panel
+  steht, hört nicht auf zu stimmen, nur weil gerade niemand es sieht.
+- Nach einem Neustart von Home Assistant ist sie leer. Ein E-Ink-Panel
+  lässt sich nicht auslesen; nach einem Neustart wissen wir schlicht nicht,
+  was darauf steht, und ein Bild von vorhin zu zeigen wäre geraten.
+
+Schlägt eine Übertragung fehl, bleibt die vorherige Vorschau stehen.
 
 ## Bekannte Unsicherheiten
 

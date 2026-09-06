@@ -28,6 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [
     Platform.BUTTON,
+    Platform.IMAGE,
     Platform.LIGHT,
     Platform.NUMBER,
     Platform.SENSOR,

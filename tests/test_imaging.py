@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from io import BytesIO
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -57,7 +58,7 @@ def test_diagnostic_pattern_is_asymmetric():
 
 def _render(**kwargs) -> bytes:
     request = imaging.ImageRequest(pattern="diagnostic", stretch=True, **kwargs)
-    return imaging.render_image(request, WIDTH, HEIGHT)
+    return imaging.render_image(request, WIDTH, HEIGHT).payload
 
 
 def test_encoding_byte_counts():
@@ -81,9 +82,9 @@ def test_mono_bit_order_is_a_per_byte_reversal():
     """MSB and LSB packing must differ exactly by reversing bits in a byte."""
     solid = imaging.ImageRequest(pattern="stripes_v", stretch=True, encoding="mono")
     solid.bit_order = "msb"
-    msb = imaging.render_image(solid, 16, 2)
+    msb = imaging.render_image(solid, 16, 2).payload
     solid.bit_order = "lsb"
-    lsb = imaging.render_image(solid, 16, 2)
+    lsb = imaging.render_image(solid, 16, 2).payload
 
     def reverse(byte: int) -> int:
         return int(f"{byte:08b}"[::-1], 2)
@@ -124,7 +125,7 @@ def test_solid_black_packs_to_a_constant():
     request = imaging.ImageRequest(
         pattern="solid_black", stretch=True, encoding="bwry_packed", dither=False
     )
-    data = imaging.render_image(request, WIDTH, HEIGHT)
+    data = imaging.render_image(request, WIDTH, HEIGHT).payload
     assert len(set(data)) == 1, "a solid image must pack to one repeated byte"
 
 
@@ -133,6 +134,77 @@ def test_rotation_and_mirror_change_the_output():
     base = _render()
     assert _render(rotate=180) != base
     assert _render(mirror=True) != base
+
+
+def test_preview_shows_exactly_what_was_packed():
+    """The preview must be decodable back into the bytes that were sent.
+
+    It claims to show the panel, so it has to come from the packed pixels
+    and not from a second, independent rendering of the source. Unpacking
+    the payload and re-reading the preview has to give the same picture.
+    """
+    from PIL import Image
+
+    request = imaging.ImageRequest(pattern="diagnostic", pixel_format="bwry")
+    request.stretch = True
+    rendered = imaging.render_image(request, WIDTH, HEIGHT)
+
+    preview = Image.open(BytesIO(rendered.preview_png)).convert("RGB")
+    assert preview.size == (WIDTH, HEIGHT)
+
+    # Unpack the payload: four 2 bit codes per byte, MSB first.
+    codes = []
+    for byte in rendered.payload:
+        for shift in (6, 4, 2, 0):
+            codes.append((byte >> shift) & 0b11)
+
+    expected = [imaging.BWRY_PALETTE[code] for code in codes]
+    assert list(preview.getdata()) == expected
+
+
+def test_preview_uses_only_panel_colours():
+    """A preview in colours the panel cannot show would be a lie."""
+    from PIL import Image
+
+    gradient = Image.new("RGB", (WIDTH, HEIGHT))
+    gradient.putdata(
+        [
+            (x * 255 // WIDTH, y * 255 // HEIGHT, 128)
+            for y in range(HEIGHT)
+            for x in range(WIDTH)
+        ]
+    )
+    buffer = BytesIO()
+    gradient.save(buffer, format="PNG")
+    rendered = imaging.render_image(
+        imaging.ImageRequest(data=buffer.getvalue(), pixel_format="bwry"),
+        WIDTH,
+        HEIGHT,
+    )
+    preview = Image.open(BytesIO(rendered.preview_png)).convert("RGB")
+    assert set(preview.getdata()) <= set(imaging.BWRY_PALETTE)
+
+
+def test_preview_is_a_png():
+    """The image entity declares image/png, so this has to be one."""
+    rendered = imaging.render_image(
+        imaging.ImageRequest(pattern="checkerboard", pixel_format="bwry"),
+        WIDTH,
+        HEIGHT,
+    )
+    assert rendered.preview_png.startswith(b"\x89PNG\r\n\x1a\n")
+    assert rendered.encoding == "bwry_packed"
+
+
+def test_mono_preview_is_black_and_white():
+    """A 1 bit panel must not get a four colour preview."""
+    from PIL import Image
+
+    rendered = imaging.render_image(
+        imaging.ImageRequest(pattern="checkerboard", pixel_format="mono"), 64, 32
+    )
+    preview = Image.open(BytesIO(rendered.preview_png)).convert("RGB")
+    assert set(preview.getdata()) <= {(0, 0, 0), (255, 255, 255)}
 
 
 if __name__ == "__main__":

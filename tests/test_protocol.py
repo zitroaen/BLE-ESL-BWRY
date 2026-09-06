@@ -253,7 +253,7 @@ def test_render_fits_panel():
     Image.new("RGB", (50, 90), (255, 0, 0)).save(path)
 
     request = imaging.ImageRequest(path=str(path), pixel_format="bwry")
-    data = imaging.render_image(request, 184, 384)
+    data = imaging.render_image(request, 184, 384).payload
     assert len(data) == (184 // 4) * 384
 
 

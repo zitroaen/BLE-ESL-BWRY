@@ -133,6 +133,13 @@ class ESLState:
     unlock_verified: bool | None = None
     last_unlock_status: dict[str, Any] | None = None
 
+    # A PNG of what was last put on the panel, for the image entity. Held in
+    # memory only: it is a picture of the current screen, and after a restart
+    # we genuinely do not know what the label is showing.
+    last_image_png: bytes | None = None
+    last_image_at: Any = None
+    last_image_source: str | None = None
+
     @property
     def error_text(self) -> str | None:
         """Human readable form of the status error code."""
@@ -720,14 +727,24 @@ class ESLDevice:
 
         # The panel decides the default; an explicit encoding wins.
         request.pixel_format = self.pixel_format
-        data = await self.hass.async_add_executor_job(
+        rendered = await self.hass.async_add_executor_job(
             render_image, request, self.width, self.height
         )
         await self._run_command(
-            f"send_image ({len(data)} bytes)",
-            lambda client: protocol.send_image(client, data, compressed=False),
+            f"send_image ({len(rendered.payload)} bytes)",
+            lambda client: protocol.send_image(
+                client, rendered.payload, compressed=False
+            ),
         )
-        _LOGGER.debug("%s image uploaded (%d bytes)", self.address, len(data))
+        # Only after the upload actually went through: the preview claims to
+        # show the panel, so it must not run ahead of the panel.
+        self.state.last_image_png = rendered.preview_png
+        self.state.last_image_at = dt_util.utcnow()
+        self.state.last_image_source = request.path or request.pattern
+        self.coordinator.async_update_listeners()
+        _LOGGER.debug(
+            "%s image uploaded (%d bytes)", self.address, len(rendered.payload)
+        )
 
     async def _async_verify_unlock(self, client) -> None:
         """Check that the label accepted the unlock, and say so if not.
