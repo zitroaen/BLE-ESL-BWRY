@@ -2,4 +2,5 @@
 pytest-homeassistant-custom-component
 bleak-retry-connector
 pillow
+pytest-timeout
 aiousbwatcher

@@ -49,6 +49,14 @@ ADVERT_TIMEOUT = timedelta(minutes=15)
 
 CONNECT_TIMEOUT = 30.0
 
+# An electronic shelf label sleeps between advertisements; gaps of several
+# minutes are normal. A Bluetooth proxy can only open a connection to a device
+# it currently has in view, so connecting to a sleeping label fails with
+# BleakOutOfConnectionSlotsError no matter how often it is retried. Waiting for
+# the next advertisement and connecting inside that window is what actually
+# works, so commands wait rather than fail.
+ADVERTISEMENT_WAIT_S = 180
+
 
 @dataclass
 class ESLState:
@@ -152,10 +160,15 @@ class ESLDevice:
         ):
             self._apply_service_info(service_info)
 
-        # Deliberately async_refresh and not async_config_entry_first_refresh:
-        # a battery label is often unreachable, and failing setup over that
-        # would leave the passive advertisement path unused as well.
-        await self.coordinator.async_refresh()
+        # Not awaited: connecting can take minutes while the label is asleep,
+        # and blocking setup on that held up Home Assistant startup for 96
+        # seconds in the field. Entities come up from advertisement data and
+        # the poll fills in the rest when it lands.
+        self.entry.async_create_background_task(
+            self.hass,
+            self.coordinator.async_refresh(),
+            name=f"{DOMAIN} initial refresh {self.address}",
+        )
 
     async def async_unload(self) -> None:
         """Stop the passive listener."""
@@ -243,15 +256,52 @@ class ESLDevice:
             return None
         return round(self.state.battery_mv / 1000.0, 3)
 
-    def _ble_device(self) -> BLEDevice:
-        """Resolve a connectable BLE device, via a proxy if that is what we have."""
-        ble_device = bluetooth.async_ble_device_from_address(
+    def _ble_device(self) -> BLEDevice | None:
+        """Return the label if some adapter or proxy can reach it right now."""
+        return bluetooth.async_ble_device_from_address(
             self.hass, self.address, connectable=True
         )
-        if ble_device is None:
+
+    async def _async_wait_for_connectable(
+        self, timeout: int = ADVERTISEMENT_WAIT_S
+    ) -> BLEDevice:
+        """Return a connectable device, waiting for the label to wake if needed.
+
+        The label is only connectable for a short window around each of its
+        advertisements. Outside that window every connection attempt fails,
+        which is what made the LED and clear screen look broken.
+        """
+        if (ble_device := self._ble_device()) is not None:
+            return ble_device
+
+        last_seen = self.state.last_advert
+        _LOGGER.debug(
+            "%s is asleep (last advertisement %s), waiting up to %ss for it to wake",
+            self.address,
+            last_seen.isoformat() if last_seen else "never",
+            timeout,
+        )
+
+        try:
+            await bluetooth.async_process_advertisements(
+                self.hass,
+                lambda service_info: True,
+                bluetooth.BluetoothCallbackMatcher(
+                    address=self.address, connectable=True
+                ),
+                bluetooth.BluetoothScanningMode.ACTIVE,
+                timeout,
+            )
+        except TimeoutError as err:
             raise HomeAssistantError(
-                f"Label {self.address} is not in range of any "
-                "Bluetooth adapter or proxy"
+                f"Label {self.address} did not advertise within {timeout}s. "
+                "It is asleep or out of range of every adapter and proxy."
+            ) from err
+
+        if (ble_device := self._ble_device()) is None:
+            raise HomeAssistantError(
+                f"Label {self.address} advertised but no adapter or proxy has a "
+                "free connection slot for it."
             )
         return ble_device
 
@@ -373,7 +423,7 @@ class ESLDevice:
         """
         report: dict[str, Any] = {}
         try:
-            ble_device = self._ble_device()
+            ble_device = await self._async_wait_for_connectable()
             async with self._lock:
                 client = await establish_connection(
                     BleakClientWithServiceCache,
@@ -424,7 +474,7 @@ class _ESLConnection:
         device = self._device
         await device._lock.acquire()
         try:
-            ble_device = device._ble_device()
+            ble_device = await device._async_wait_for_connectable()
             client = await establish_connection(
                 BleakClientWithServiceCache,
                 ble_device,

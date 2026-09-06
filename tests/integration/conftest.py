@@ -36,6 +36,11 @@ def config_entry() -> MockConfigEntry:
     )
 
 
+async def _never_advertises(*args, **kwargs):
+    """Stand in for a label that stays asleep, without the real wait."""
+    raise TimeoutError
+
+
 @pytest.fixture
 def mock_bluetooth():
     """Stub out the Bluetooth stack so no adapter is required."""
@@ -51,6 +56,12 @@ def mock_bluetooth():
         patch(
             "custom_components.esl_zhsunyco.device.bluetooth.async_ble_device_from_address",
             return_value=None,
+        ),
+        # Without this the tests would sit through the real 180 s wait for an
+        # advertisement that never arrives.
+        patch(
+            "custom_components.esl_zhsunyco.device.bluetooth.async_process_advertisements",
+            side_effect=_never_advertises,
         ),
     ):
         yield

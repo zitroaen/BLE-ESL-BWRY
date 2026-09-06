@@ -198,6 +198,27 @@ Diagnose herunterladen** eine JSON-Datei mit dem rohen Advertisement, der
 Feld-für-Feld-Zerlegung und den Batteriewerten unter allen plausiblen
 Dekodierregeln.
 
+### Kommandos scheitern mit „out of connection slots"
+
+Ein ESL schläft zwischen seinen Advertisements — Pausen von mehreren Minuten
+sind normal. Ein Bluetooth-Proxy kann eine Verbindung nur zu einem Gerät
+aufbauen, das er **gerade** sieht. Außerhalb dieses Fensters scheitert jeder
+Versuch, egal wie oft wiederholt wird:
+
+```
+BleakOutOfConnectionSlotsError: ... no scanner currently has it in its
+discovered devices ... last advertisement 262s ago
+```
+
+Die Integration wartet deshalb seit 0.6.0 auf das nächste Advertisement
+(bis zu 180 s) und verbindet sich innerhalb dieses Fensters. Ein Tastendruck
+kann dadurch spürbar dauern — das ist normal und kein Fehler.
+
+Hilft das nicht, steht der Proxy zu weit weg oder hat keine freien
+Verbindungs-Slots. Ein zusätzlicher
+[ESPHome-Bluetooth-Proxy](https://esphome.github.io/bluetooth-proxies/) in
+der Nähe des Labels ist dann die Lösung.
+
 ### Zwei ESL-Integrationen gleichzeitig
 
 Ein BLE-Label kann immer nur **eine** Verbindung gleichzeitig annehmen. Wenn
