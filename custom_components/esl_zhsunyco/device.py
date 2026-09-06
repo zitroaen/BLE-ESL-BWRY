@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -14,15 +15,18 @@ from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from . import protocol
 from .const import (
     CONF_ADDRESS,
+    CONF_LINGER_S,
     CONF_MODEL,
     CONF_SCAN_INTERVAL_MIN,
     CONF_WRITE_MODE,
+    DEFAULT_LINGER_S,
     DEFAULT_MODEL,
     DEFAULT_PIXEL_FORMAT,
     DEFAULT_RGB_OFF_MS,
@@ -115,6 +119,9 @@ class ESLDevice:
         self.state = ESLState()
         self._lock = asyncio.Lock()
         self._unregister_advert: CALLBACK_TYPE | None = None
+        # A live connection kept between commands, plus the timer ending it.
+        self._client: BleakClientWithServiceCache | None = None
+        self._cancel_linger: CALLBACK_TYPE | None = None
 
         self.coordinator: DataUpdateCoordinator[ESLState] = DataUpdateCoordinator(
             hass,
@@ -128,6 +135,54 @@ class ESLDevice:
     # ------------------------------------------------------------------
     # Setup / teardown
     # ------------------------------------------------------------------
+
+    @property
+    def linger_seconds(self) -> int:
+        """How long to hold the connection open after a command."""
+        return int(self.entry.options.get(CONF_LINGER_S, DEFAULT_LINGER_S))
+
+    @property
+    def connected(self) -> bool:
+        """Whether a connection is currently being held open."""
+        return self._client is not None and self._client.is_connected
+
+    @callback
+    def _cancel_linger_timer(self) -> None:
+        """Stop a pending disconnect."""
+        if self._cancel_linger is not None:
+            self._cancel_linger()
+            self._cancel_linger = None
+
+    @callback
+    def _schedule_linger(self) -> None:
+        """Disconnect after the linger period, unless another command lands."""
+        self._cancel_linger_timer()
+        if self.linger_seconds <= 0:
+            self.hass.async_create_task(self._async_disconnect())
+            return
+
+        def _fire(_now) -> None:
+            self.hass.async_create_task(self._async_disconnect())
+
+        self._cancel_linger = async_call_later(self.hass, self.linger_seconds, _fire)
+
+    async def _async_disconnect(self) -> None:
+        """Close the held connection."""
+        async with self._lock:
+            client, self._client = self._client, None
+            if client is None:
+                return
+            try:
+                await client.disconnect()
+            except Exception as err:  # noqa: BLE001 - teardown is best effort
+                _LOGGER.debug("Disconnect of %s failed: %s", self.address, err)
+            else:
+                _LOGGER.debug("%s disconnected after linger", self.address)
+
+    @callback
+    def _on_disconnected(self, _client) -> None:
+        """Forget the client after the label or the proxy dropped the link."""
+        self._client = None
 
     @property
     def write_response(self) -> bool | None:
@@ -175,10 +230,12 @@ class ESLDevice:
         )
 
     async def async_unload(self) -> None:
-        """Stop the passive listener."""
+        """Stop the passive listener and close any held connection."""
         if self._unregister_advert is not None:
             self._unregister_advert()
             self._unregister_advert = None
+        self._cancel_linger_timer()
+        await self._async_disconnect()
 
     def async_update_interval(self) -> None:
         """Apply a changed poll interval from the options flow."""
@@ -336,9 +393,9 @@ class ESLDevice:
         self.state.last_error_message = None
         return self.state
 
-    def connection(self) -> _ESLConnection:
+    def connection(self, wait: int = ADVERTISEMENT_WAIT_S) -> _ESLConnection:
         """Return an async context manager holding an unlocked connection."""
-        return _ESLConnection(self)
+        return _ESLConnection(self, wait)
 
     # ------------------------------------------------------------------
     # Commands
@@ -489,18 +546,8 @@ class ESLDevice:
         """
         report: dict[str, Any] = {}
         try:
-            ble_device = await self._async_wait_for_connectable(wait)
-            async with self._lock:
-                client = await establish_connection(
-                    BleakClientWithServiceCache,
-                    ble_device,
-                    self.address,
-                    timeout=CONNECT_TIMEOUT,
-                )
-                try:
-                    report = await protocol.probe_device(client)
-                finally:
-                    await client.disconnect()
+            async with self.connection(wait) as client:
+                report = await protocol.probe_device(client)
             report["connection"] = "ok"
         except Exception as err:  # noqa: BLE001 - the report is the deliverable
             _LOGGER.warning("Probe of %s could not connect: %s", self.address, err)
@@ -540,43 +587,67 @@ class ESLDevice:
 
 
 class _ESLConnection:
-    """Async context manager that connects, unlocks and disconnects again.
+    """Async context manager providing an unlocked connection.
 
     A single lock serialises access so entity presses, service calls and the
     coordinator poll never fight over the same label.
+
+    The connection is NOT closed on exit. Reconnecting means waiting for the
+    label to advertise again, which takes minutes and dominates everything
+    else, so it is held open for the linger period instead and reused by any
+    command that follows. The reference implementation for the sibling
+    firmware does the same thing, keeping one connection for an entire
+    transfer.
     """
 
-    def __init__(self, device: ESLDevice) -> None:
+    def __init__(self, device: ESLDevice, wait: int = ADVERTISEMENT_WAIT_S) -> None:
         self._device = device
-        self._client: BleakClientWithServiceCache | None = None
+        self._wait = wait
 
     async def __aenter__(self) -> BleakClientWithServiceCache:
         device = self._device
         await device._lock.acquire()
+        device._cancel_linger_timer()
+
+        # Reuse a live connection; the unlock is per connection and still valid.
+        if (client := device._client) is not None and client.is_connected:
+            _LOGGER.debug("%s reusing the open connection", device.address)
+            return client
+        device._client = None
+
         try:
-            ble_device = await device._async_wait_for_connectable()
+            ble_device = await device._async_wait_for_connectable(self._wait)
             client = await establish_connection(
                 BleakClientWithServiceCache,
                 ble_device,
                 device.address,
                 timeout=CONNECT_TIMEOUT,
+                disconnected_callback=device._on_disconnected,
             )
         except Exception:
             device._lock.release()
             raise
 
-        self._client = client
         try:
             await protocol.unlock(client)
         except Exception:
             await client.disconnect()
             device._lock.release()
             raise
+
+        device._client = client
         return client
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
+        device = self._device
         try:
-            if self._client is not None:
-                await self._client.disconnect()
+            if exc_type is not None and device._client is not None:
+                # A failed command may have left the link unusable; do not
+                # hand a broken connection to whatever runs next.
+                client, device._client = device._client, None
+                with contextlib.suppress(Exception):
+                    await client.disconnect()
+            else:
+                device._schedule_linger()
         finally:
-            self._device._lock.release()
+            device._lock.release()

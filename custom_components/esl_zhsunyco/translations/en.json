@@ -36,10 +36,12 @@
         "title": "ESL options",
         "data": {
           "scan_interval_min": "Poll interval (0 disables polling)",
-          "write_mode": "Command write mode"
+          "write_mode": "Command write mode",
+          "linger_s": "Keep connection open (seconds)"
         },
         "data_description": {
-          "write_mode": "How commands are written over Bluetooth. Try 'without response' if the LED and clear screen do nothing while sensors still update."
+          "write_mode": "How commands are written over Bluetooth. Try 'without response' if the LED and clear screen do nothing while sensors still update.",
+          "linger_s": "How long to hold the Bluetooth connection after a command. Reconnecting means waiting for the label to advertise again, which takes minutes, so a short linger makes follow-up commands instant. 0 disconnects immediately."
         }
       }
     }

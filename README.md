@@ -334,8 +334,20 @@ discovered devices ... last advertisement 262s ago
 ```
 
 Die Integration wartet deshalb seit 0.6.0 auf das nächste Advertisement
-(bis zu 180 s) und verbindet sich innerhalb dieses Fensters. Ein Tastendruck
-kann dadurch spürbar dauern — das ist normal und kein Fehler.
+(bis zu 180 s) und verbindet sich innerhalb dieses Fensters. Der **erste**
+Tastendruck kann dadurch spürbar dauern — das ist normal und kein Fehler.
+
+Seit 0.9.0 bleibt die Verbindung danach für 60 Sekunden offen
+(einstellbar in den Optionen, 0 = sofort trennen). Folgekommandos innerhalb
+dieses Fensters wirken **sofort**, weil nicht erneut gewartet werden muss.
+
+Zum Vergleich: Die Referenzimplementierung
+[roxburghm/zhsunyco-esl](https://github.com/roxburghm/zhsunyco-esl) wartet
+mit `BleakScanner.find_device_by_address(..., timeout=120.0)` genauso auf ein
+Advertisement — das Warten ist also keine Eigenheit dieser Integration,
+sondern eine Eigenschaft der Geräteklasse. Sie hält die Verbindung
+allerdings über den gesamten Vorgang offen, was diese Integration jetzt
+ebenfalls tut.
 
 Hilft das nicht, steht der Proxy zu weit weg oder hat keine freien
 Verbindungs-Slots. Ein zusätzlicher

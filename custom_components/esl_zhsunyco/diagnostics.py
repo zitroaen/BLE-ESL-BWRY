@@ -68,6 +68,8 @@ async def async_get_config_entry_diagnostics(
             "rssi": state.rssi,
             "last_advert": state.last_advert.isoformat() if state.last_advert else None,
             "last_connect_ok": state.last_connect_ok,
+            "connection_held_open": device.connected,
+            "linger_seconds": device.linger_seconds,
             "last_error_message": state.last_error_message,
         },
         "coordinator": {

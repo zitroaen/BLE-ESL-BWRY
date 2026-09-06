@@ -12,9 +12,11 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_ADDRESS,
+    CONF_LINGER_S,
     CONF_MODEL,
     CONF_SCAN_INTERVAL_MIN,
     CONF_WRITE_MODE,
+    DEFAULT_LINGER_S,
     DEFAULT_MODEL,
     DEFAULT_SCAN_INTERVAL_MIN,
     DEFAULT_WRITE_MODE,
@@ -38,6 +40,16 @@ WRITE_MODE_SELECTOR = selector.SelectSelector(
         options=list(WRITE_MODES),
         mode=selector.SelectSelectorMode.DROPDOWN,
         translation_key="write_mode",
+    )
+)
+
+LINGER_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=0,
+        max=600,
+        step=5,
+        unit_of_measurement="s",
+        mode=selector.NumberSelectorMode.BOX,
     )
 )
 
@@ -163,6 +175,7 @@ class ESLOptionsFlow(OptionsFlow):
             return self.async_create_entry(
                 data={
                     CONF_SCAN_INTERVAL_MIN: int(user_input[CONF_SCAN_INTERVAL_MIN]),
+                    CONF_LINGER_S: int(user_input[CONF_LINGER_S]),
                     CONF_WRITE_MODE: user_input[CONF_WRITE_MODE],
                 }
             )
@@ -178,6 +191,10 @@ class ESLOptionsFlow(OptionsFlow):
                             CONF_SCAN_INTERVAL_MIN, DEFAULT_SCAN_INTERVAL_MIN
                         ),
                     ): INTERVAL_SELECTOR,
+                    vol.Required(
+                        CONF_LINGER_S,
+                        default=options.get(CONF_LINGER_S, DEFAULT_LINGER_S),
+                    ): LINGER_SELECTOR,
                     vol.Required(
                         CONF_WRITE_MODE,
                         default=options.get(CONF_WRITE_MODE, DEFAULT_WRITE_MODE),

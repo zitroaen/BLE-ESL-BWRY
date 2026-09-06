@@ -14,6 +14,13 @@ CONF_ADDRESS: Final = "address"
 CONF_MODEL: Final = "model"
 CONF_SCAN_INTERVAL_MIN: Final = "scan_interval_min"
 CONF_WRITE_MODE: Final = "write_mode"
+CONF_LINGER_S: Final = "linger_s"
+
+# How long the connection is held open after a command. Reconnecting means
+# waiting for the label to advertise again, which dominates everything else,
+# so a short linger makes a burst of commands feel instant. It does occupy a
+# proxy connection slot and costs the label some battery, hence not forever.
+DEFAULT_LINGER_S: Final = 60
 
 # How commands are written. The document does not say which ATT write type
 # the label expects, and a label that only handles one of them silently
