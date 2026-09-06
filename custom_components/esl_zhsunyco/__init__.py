@@ -135,6 +135,13 @@ async def async_update_options(hass: HomeAssistant, entry: ESLConfigEntry) -> No
     await device.coordinator.async_request_refresh()
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete the label's stored panel image when the label is removed."""
+    from .image_store import PanelImageStore
+
+    await PanelImageStore(hass, entry.entry_id).async_clear()
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ESLConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

@@ -180,3 +180,161 @@ async def test_the_entity_state_is_the_last_update_time(
     after = hass.states.get(ENTITY).state
     assert after != before
     assert dt_util.parse_datetime(after) is not None
+
+
+async def test_the_preview_survives_a_restart(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """The panel keeps its image without power, so the record must too.
+
+    Reloading the entry throws away every bit of in-memory state, which is
+    what a Home Assistant restart does to this integration.
+    """
+    device = await _setup(hass, config_entry)
+    await _press_test_pattern(hass)
+    sent = device.state.last_image_png
+    sent_at = device.state.last_image_at
+    assert sent is not None
+
+    await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    reloaded = config_entry.runtime_data
+    assert reloaded is not device, "the reload must build a fresh device"
+    assert reloaded.state.last_image_png == sent
+    assert reloaded.state.last_image_at == sent_at
+    assert reloaded.state.last_image_source == "diagnostic"
+    # And the entity serves it, not just the device object.
+    assert hass.states.get(ENTITY).state == sent_at.isoformat()
+
+
+async def test_nothing_is_restored_when_nothing_was_ever_sent(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """A fresh install must not come up claiming to know the panel."""
+    await _setup(hass, config_entry)
+
+    await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert config_entry.runtime_data.state.last_image_png is None
+
+
+async def test_a_failed_send_does_not_reach_the_store(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """Persistence must not turn a failed upload into a permanent lie."""
+    device = await _setup(hass, config_entry)
+    await _press_test_pattern(hass)
+    first = device.state.last_image_png
+
+    async def failing_send_image(client, data, *, compressed=False):
+        raise OSError("the label hung up")
+
+    with (
+        patch(
+            "custom_components.esl_zhsunyco.device.protocol.send_image",
+            new=failing_send_image,
+        ),
+        patch(
+            "custom_components.esl_zhsunyco.device._ESLConnection.__aenter__",
+            new=AsyncMock(return_value=object()),
+        ),
+        patch(
+            "custom_components.esl_zhsunyco.device._ESLConnection.__aexit__",
+            new=AsyncMock(return_value=False),
+        ),
+        contextlib.suppress(Exception),
+    ):
+        await hass.services.async_call(
+            "button",
+            "press",
+            {"entity_id": "button.esl_66_66_54_20_00_55_test_pattern"},
+            blocking=True,
+        )
+
+    await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert config_entry.runtime_data.state.last_image_png == first
+
+
+async def test_clearing_the_screen_forgets_the_picture(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """After a clear the panel is not showing the image any more.
+
+    Restoring it after a restart would then be a picture of a screen that
+    is blank, which is worse than showing nothing.
+    """
+    device = await _setup(hass, config_entry)
+    await _press_test_pattern(hass)
+    assert device.state.last_image_png is not None
+
+    with (
+        patch(
+            "custom_components.esl_zhsunyco.device.protocol.clear_screen",
+            new=AsyncMock(),
+        ),
+        patch(
+            "custom_components.esl_zhsunyco.device._ESLConnection.__aenter__",
+            new=AsyncMock(return_value=object()),
+        ),
+        patch(
+            "custom_components.esl_zhsunyco.device._ESLConnection.__aexit__",
+            new=AsyncMock(return_value=False),
+        ),
+    ):
+        await hass.services.async_call(
+            "button",
+            "press",
+            {"entity_id": "button.esl_66_66_54_20_00_55_clear_screen"},
+            blocking=True,
+        )
+
+    assert device.state.last_image_png is None
+
+    await hass.config_entries.async_reload(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert config_entry.runtime_data.state.last_image_png is None
+
+
+async def test_a_corrupt_store_does_not_stop_setup(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """A bad stored image is a reason to show nothing, not to fail setup."""
+    from custom_components.esl_zhsunyco.image_store import PanelImageStore
+
+    config_entry.add_to_hass(hass)
+    store = PanelImageStore(hass, config_entry.entry_id)
+    await store._store.async_save({"png_base64": "not base64!!", "at": "nonsense"})
+
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert config_entry.runtime_data.state.last_image_png is None
+    assert hass.states.get(ENTITY) is not None
+
+
+async def test_what_gets_stored_is_json_serialisable(
+    hass: HomeAssistant, config_entry, mock_bluetooth, hass_storage
+) -> None:
+    """The test store keeps objects in memory; the real one writes JSON.
+
+    Handing a Store raw bytes passes in tests and fails on disk, so check
+    the payload the way Home Assistant will actually have to write it, and
+    that it decodes back to exactly the PNG that was sent.
+    """
+    import base64
+    import json
+
+    device = await _setup(hass, config_entry)
+    await _press_test_pattern(hass)
+
+    key = f"esl_zhsunyco.{config_entry.entry_id}.panel"
+    assert key in hass_storage, sorted(hass_storage)
+    stored = hass_storage[key]["data"]
+
+    assert json.loads(json.dumps(stored)) == stored
+    assert base64.b64decode(stored["png_base64"]) == device.state.last_image_png

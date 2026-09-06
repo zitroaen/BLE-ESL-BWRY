@@ -274,15 +274,28 @@ type: picture-entity
 entity: image.esl_66_66_17_40_27_77_panel
 ```
 
-Zwei bewusste Eigenheiten:
+Sie **überlebt einen Neustart** von Home Assistant. Ein E-Ink-Panel hält
+sein Bild ohne Strom, und solange nichts anderes auf das Label schreibt,
+zeigt es nach dem Neustart weiterhin genau das. Gespeichert wird als
+base64-PNG in `.storage` — je nach Motiv rund 1 kB (Flächen, Text) bis
+14 kB (durchgehend gerastertes Foto).
 
-- Sie bleibt **verfügbar**, auch wenn das Label schläft. Was auf dem Panel
-  steht, hört nicht auf zu stimmen, nur weil gerade niemand es sieht.
-- Nach einem Neustart von Home Assistant ist sie leer. Ein E-Ink-Panel
-  lässt sich nicht auslesen; nach einem Neustart wissen wir schlicht nicht,
-  was darauf steht, und ein Bild von vorhin zu zeigen wäre geraten.
+Aktualisiert wird sie **nur nach einer erfolgreichen Übertragung**:
 
-Schlägt eine Übertragung fehl, bleibt die vorherige Vorschau stehen.
+- Schlägt das Senden fehl, bleibt die vorherige Vorschau stehen — auf dem
+  Panel steht ja auch weiterhin das alte Bild.
+- **Bildschirm löschen verwirft sie.** Danach zeigt das Panel das Bild nicht
+  mehr, und es nach einem Neustart wiederherzustellen wäre ein Bild von
+  einem leeren Schirm. Was ein gelöschtes Panel genau anzeigt, steht
+  nirgends, deshalb lieber gar kein Bild als ein geratenes.
+- Wird das Label aus Home Assistant entfernt, wird der Speicher mitgelöscht.
+
+Verfügbar bleibt sie außerdem, auch wenn das Label schläft: was auf dem
+Panel steht, hört nicht auf zu stimmen, nur weil gerade niemand es sieht.
+
+Die Annahme dahinter ist, dass **nur** diese Integration Bilder auf das
+Label schreibt. Schreibt etwas anderes darauf, zeigt die Vorschau ein
+veraltetes Bild.
 
 ## Bekannte Unsicherheiten
 

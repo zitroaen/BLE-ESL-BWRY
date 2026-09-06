@@ -47,6 +47,7 @@ from .const import (
     WRITE_MODE_NO_RESPONSE,
     WRITE_MODE_RESPONSE,
 )
+from .image_store import PanelImageStore
 
 if TYPE_CHECKING:
     from .imaging import ImageRequest
@@ -133,9 +134,10 @@ class ESLState:
     unlock_verified: bool | None = None
     last_unlock_status: dict[str, Any] | None = None
 
-    # A PNG of what was last put on the panel, for the image entity. Held in
-    # memory only: it is a picture of the current screen, and after a restart
-    # we genuinely do not know what the label is showing.
+    # A PNG of what was last put on the panel, for the image entity. Kept
+    # across restarts: an e-ink panel holds its image without power and
+    # nothing else writes to the label, so the stored copy is still what it
+    # is showing.
     last_image_png: bytes | None = None
     last_image_at: Any = None
     last_image_source: str | None = None
@@ -170,6 +172,7 @@ class ESLDevice:
         self._client: BleakClientWithServiceCache | None = None
         self._cancel_linger: CALLBACK_TYPE | None = None
         self._cancel_seed: CALLBACK_TYPE | None = None
+        self._image_store = PanelImageStore(hass, entry.entry_id)
 
         self.coordinator: DataUpdateCoordinator[ESLState] = DataUpdateCoordinator(
             hass,
@@ -284,6 +287,17 @@ class ESLDevice:
 
     async def async_setup(self) -> None:
         """Start the passive listener and run the first poll."""
+        # Before the platforms come up, so the image entity has its picture
+        # from its very first state rather than briefly showing nothing.
+        if (stored := await self._image_store.async_load()) is not None:
+            png, at, source = stored
+            self.state.last_image_png = png
+            self.state.last_image_at = at
+            self.state.last_image_source = source
+            _LOGGER.debug(
+                "%s restored the panel image from %s", self.address, at.isoformat()
+            )
+
         self._unregister_advert = bluetooth.async_register_callback(
             self.hass,
             self._advert_received,
@@ -727,6 +741,14 @@ class ESLDevice:
             "clear_screen",
             lambda client: protocol.clear_screen(client, response=self.write_response),
         )
+        # The panel is no longer showing the last image, so keeping a picture
+        # of it - and restoring that picture after a restart - would be a
+        # lie. What a cleared panel does show is not documented, so the
+        # honest answer is no picture rather than a guessed blank one.
+        self.state.last_image_png = None
+        self.state.last_image_at = None
+        self.state.last_image_source = None
+        await self._image_store.async_clear()
         _LOGGER.debug("%s screen cleared", self.address)
         return record
 
@@ -746,10 +768,17 @@ class ESLDevice:
             ),
         )
         # Only after the upload actually went through: the preview claims to
-        # show the panel, so it must not run ahead of the panel.
+        # show the panel, so it must not run ahead of the panel. A failed
+        # send raises above this line and leaves the previous picture, which
+        # is still the one the panel is displaying.
         self.state.last_image_png = rendered.preview_png
         self.state.last_image_at = dt_util.utcnow()
         self.state.last_image_source = request.path or request.pattern
+        await self._image_store.async_save(
+            rendered.preview_png,
+            self.state.last_image_at,
+            self.state.last_image_source,
+        )
         self.coordinator.async_update_listeners()
         _LOGGER.debug(
             "%s image uploaded (%d bytes)", self.address, len(rendered.payload)
