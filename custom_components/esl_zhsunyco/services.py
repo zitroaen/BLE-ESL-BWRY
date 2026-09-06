@@ -9,7 +9,13 @@ from functools import partial
 
 import voluptuous as vol
 from homeassistant.components import persistent_notification
-from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    callback,
+)
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
@@ -168,6 +174,27 @@ def _run_detached(
     )
 
 
+def _outcome(device: ESLDevice, record: dict) -> dict:
+    """Boil one command record down to what an automation needs.
+
+    A failed write raises, so an automation already notices that. This
+    carries the case an exception cannot express: the label accepted the
+    write and the panel never went busy, which means it did not act on it.
+    """
+    status = record.get("status_after") or {}
+    return {
+        "address": device.address,
+        "ok": record.get("result") == "ok",
+        # The panel reported busy, so it really started drawing.
+        "label_reacted": bool(record.get("label_reacted")),
+        "connection_dropped": bool(record.get("connection_dropped")),
+        "error_code": (status.get("final") or {}).get("error_code"),
+        "detail": record.get("detail") or record.get("interpretation"),
+        "at": record.get("at"),
+        **{k: record[k] for k in ("bytes", "encoding") if k in record},
+    }
+
+
 def _resolve_devices(hass: HomeAssistant, call: ServiceCall) -> list[ESLDevice]:
     """Map the service target onto our device objects."""
     registry = dr.async_get(hass)
@@ -199,10 +226,11 @@ def async_setup_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, SERVICE_SET_RGB):
         return
 
-    async def _set_rgb(call: ServiceCall) -> None:
+    async def _set_rgb(call: ServiceCall) -> ServiceResponse:
         red, green, blue = call.data["rgb_color"]
+        results = []
         for device in _resolve_devices(hass, call):
-            await device.async_set_rgb(
+            record = await device.async_set_rgb(
                 red,
                 green,
                 blue,
@@ -210,10 +238,14 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 call.data.get("off_ms"),
                 call.data.get("work_ms"),
             )
+            results.append(_outcome(device, record))
+        return {"results": results}
 
-    async def _clear_screen(call: ServiceCall) -> None:
+    async def _clear_screen(call: ServiceCall) -> ServiceResponse:
+        results = []
         for device in _resolve_devices(hass, call):
-            await device.async_clear_screen()
+            results.append(_outcome(device, await device.async_clear_screen()))
+        return {"results": results}
 
     async def _debug_probe(call: ServiceCall) -> None:
         """Collect a GATT report and surface it as a persistent notification."""
@@ -289,33 +321,49 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 ),
             )
 
-    async def _set_image(call: ServiceCall) -> None:
+    async def _set_image(call: ServiceCall) -> ServiceResponse:
         path = call.data["path"]
         if not hass.config.is_allowed_path(path):
             raise ServiceValidationError(
                 f"Path {path} is not allowed, add it to allowlist_external_dirs"
             )
         request = _request_from(call, path=path)
+        results = []
         for device in _resolve_devices(hass, call):
-            await device.async_send_image(request)
+            results.append(_outcome(device, await device.async_send_image(request)))
+        return {"results": results}
 
-    async def _send_test_pattern(call: ServiceCall) -> None:
+    async def _send_test_pattern(call: ServiceCall) -> ServiceResponse:
         """Send a built-in pattern, no file and no allowlist needed."""
         request = _request_from(call, pattern=call.data["pattern"])
         # A test pattern is drawn at panel resolution already; fitting it
         # would letterbox and hide exactly the edges being tested.
         request.stretch = True
+        results = []
         for device in _resolve_devices(hass, call):
-            await device.async_send_image(request)
+            results.append(_outcome(device, await device.async_send_image(request)))
+        return {"results": results}
 
     hass.services.async_register(
-        DOMAIN, SERVICE_SET_RGB, _set_rgb, schema=SET_RGB_SCHEMA
+        DOMAIN,
+        SERVICE_SET_RGB,
+        _set_rgb,
+        schema=SET_RGB_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_CLEAR_SCREEN, _clear_screen, schema=CLEAR_SCREEN_SCHEMA
+        DOMAIN,
+        SERVICE_CLEAR_SCREEN,
+        _clear_screen,
+        schema=CLEAR_SCREEN_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_SET_IMAGE, _set_image, schema=SET_IMAGE_SCHEMA
+        DOMAIN,
+        SERVICE_SET_IMAGE,
+        _set_image,
+        schema=SET_IMAGE_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN, SERVICE_DEBUG_PROBE, _debug_probe, schema=DEBUG_PROBE_SCHEMA
@@ -331,4 +379,5 @@ def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_SEND_TEST_PATTERN,
         _send_test_pattern,
         schema=SEND_TEST_PATTERN_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )

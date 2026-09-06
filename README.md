@@ -160,6 +160,108 @@ Chunks — rechne mit etwa einer halben Minute, sobald die Verbindung steht.
 Bei Grafiken mit großen einfarbigen Flächen (Text, Tabellen, Kalender)
 liefert `dither: false` meist ein ruhigeres Bild als das Rastern.
 
+### Hat das Senden geklappt?
+
+Es gibt **zwei** verschiedene Fehlschläge, und sie fühlen sich unterschiedlich
+an:
+
+| Fall | Woran man ihn erkennt |
+|---|---|
+| Übertragung gescheitert (Label schläft, Verbindung bricht ab) | Der Dienst wirft einen Fehler, die Automation bricht ab |
+| Übertragung angenommen, Panel tut nichts | **Kein** Fehler — nur `label_reacted: false` |
+
+Der zweite ist der heimtückische: HA meldet Erfolg, das Label zeigt weiter
+das alte Bild. Deshalb geben `set_image`, `send_test_pattern`, `clear_screen`
+und `set_rgb` eine Antwort zurück:
+
+```yaml
+action: esl_zhsunyco.set_image
+data:
+  device_id: <dein Label>
+  path: /config/www/esl/kalender.png
+response_variable: ergebnis
+```
+
+```yaml
+results:
+  - address: "66:66:17:40:27:77"
+    ok: true              # der Schreibvorgang selbst lief durch
+    label_reacted: true   # das Panel meldete busy, hat also gezeichnet
+    connection_dropped: false
+    error_code: 0
+    bytes: 17664
+    encoding: bwry_packed
+    at: "2026-09-06T19:12:04.881+00:00"
+```
+
+**`label_reacted` ist die Prüfung, die zählt.** `ok: true` sagt nur, dass die
+Bytes rausgingen.
+
+Die Antwort ist optional — bestehende Automationen ohne `response_variable`
+laufen unverändert weiter.
+
+#### Automation mit Wiederholung
+
+Ein schlafendes Label ist der Normalfall, nicht die Ausnahme. Drei Versuche
+mit Pause dazwischen sind realistisch:
+
+```yaml
+- repeat:
+    count: 3
+    sequence:
+      # Zurücksetzen, sonst steht nach einem Fehler noch das Ergebnis
+      # des vorherigen Durchlaufs in der Variable.
+      - variables:
+          ergebnis: null
+      - action: esl_zhsunyco.set_image
+        data:
+          device_id: <dein Label>
+          path: /config/www/esl/kalender.png
+        response_variable: ergebnis
+        continue_on_error: true
+      - if:
+          - condition: template
+            value_template: >-
+              {{ ergebnis and ergebnis.results[0].label_reacted }}
+        then:
+          - stop: "Bild steht auf dem Panel"
+      - delay: "00:05:00"
+- action: persistent_notification.create
+  data:
+    title: ESL
+    message: Kalenderbild konnte nach drei Versuchen nicht übertragen werden.
+```
+
+`continue_on_error: true` ist nötig, damit ein Verbindungsfehler die Schleife
+nicht sofort beendet. Das `variables:`-Zurücksetzen ist nicht kosmetisch: ohne
+es behält `ergebnis` nach einem geworfenen Fehler den Wert des letzten
+erfolgreichen Durchlaufs, und die Schleife bricht fälschlich ab.
+
+Zur Pause: Warte großzügig. Das Label advertised unregelmäßig, die Integration
+wartet ohnehin bis zu 300 s auf ein Fenster, und ein zu schneller zweiter
+Versuch konkurriert nur mit dem ersten um den einzigen Verbindungsslot.
+
+#### Ohne Antwortvariable
+
+Der Zustand der `image`-Entität **ist** der Zeitstempel der letzten
+erfolgreichen Übertragung. Das reicht als Auslöser:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: image.esl_66_66_17_40_27_77_panel
+```
+
+Und als Prüfung, ob heute schon etwas ankam:
+
+```yaml
+{{ states('image.esl_66_66_17_40_27_77_panel') | as_datetime | as_local
+   > today_at('00:00') }}
+```
+
+Ausführlicher steht der letzte Befehl mit Statusbytes und Deutung in der
+Diagnose-Datei unter `last_command`.
+
 ### Was das Panel gerade zeigt
 
 Jedes Label hat eine `image`-Entität, die das zuletzt übertragene Bild

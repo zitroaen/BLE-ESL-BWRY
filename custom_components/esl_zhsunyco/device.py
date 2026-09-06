@@ -570,8 +570,13 @@ class ESLDevice:
         status_before: dict[str, Any] | None = None,
         status_after: dict[str, Any] | None = None,
         dropped: bool = False,
-    ) -> None:
-        """Remember how the last command went, for the diagnostics report."""
+    ) -> dict[str, Any]:
+        """Remember how the last command went, and hand the record back.
+
+        The record is what the diagnostics show and what a service call
+        returns, so an automation can see the one outcome an exception
+        cannot express: the write was accepted and the panel ignored it.
+        """
         record: dict[str, Any] = {
             "kind": kind,
             "at": dt_util.utcnow().isoformat(),
@@ -602,6 +607,7 @@ class ESLDevice:
                     "the command was most likely not understood"
                 )
         self.state.last_command = record
+        return record
 
     async def _drop_connection_and_clear_cache(
         self, used: BleakClientWithServiceCache | None = None
@@ -617,7 +623,7 @@ class ESLDevice:
             if client is not None:
                 await _async_close(client, self.address)
 
-    async def _run_command(self, kind: str, action) -> None:
+    async def _run_command(self, kind: str, action) -> dict[str, Any]:
         """Run one command and check whether the label reacted.
 
         Retries once on a missing characteristic: the GATT table can be a
@@ -655,7 +661,7 @@ class ESLDevice:
                 raise
 
         dropped = not self.connected
-        self._record_command(
+        record = self._record_command(
             kind,
             ok=True,
             status_before=before,
@@ -670,6 +676,7 @@ class ESLDevice:
         if isinstance(final.get("error_code"), int):
             self.state.error = final["error_code"]
         self.coordinator.async_update_listeners()
+        return record
 
     async def async_set_rgb(
         self,
@@ -679,7 +686,7 @@ class ESLDevice:
         on_ms: int | None = None,
         off_ms: int | None = None,
         work_ms: int | None = None,
-    ) -> None:
+    ) -> dict[str, Any]:
         """Drive the RGB LED (section 3.8)."""
         on_ms = self.state.rgb_on_ms if on_ms is None else on_ms
         off_ms = self.state.rgb_off_ms if off_ms is None else off_ms
@@ -697,7 +704,7 @@ class ESLDevice:
                 response=self.write_response,
             )
 
-        await self._run_command("set_rgb", _send)
+        record = await self._run_command("set_rgb", _send)
 
         self.state.rgb_color = (red, green, blue)
         self.state.rgb_is_on = work_ms > 0 and any((red, green, blue))
@@ -712,16 +719,18 @@ class ESLDevice:
             work_ms,
         )
         self.coordinator.async_update_listeners()
+        return record
 
-    async def async_clear_screen(self) -> None:
+    async def async_clear_screen(self) -> dict[str, Any]:
         """Clear the panel (section 3.7)."""
-        await self._run_command(
+        record = await self._run_command(
             "clear_screen",
             lambda client: protocol.clear_screen(client, response=self.write_response),
         )
         _LOGGER.debug("%s screen cleared", self.address)
+        return record
 
-    async def async_send_image(self, request: ImageRequest) -> None:
+    async def async_send_image(self, request: ImageRequest) -> dict[str, Any]:
         """Render and upload a full screen image (sections 3.1 - 3.2)."""
         from .imaging import render_image
 
@@ -730,7 +739,7 @@ class ESLDevice:
         rendered = await self.hass.async_add_executor_job(
             render_image, request, self.width, self.height
         )
-        await self._run_command(
+        record = await self._run_command(
             f"send_image ({len(rendered.payload)} bytes)",
             lambda client: protocol.send_image(
                 client, rendered.payload, compressed=False
@@ -745,6 +754,7 @@ class ESLDevice:
         _LOGGER.debug(
             "%s image uploaded (%d bytes)", self.address, len(rendered.payload)
         )
+        return {**record, "bytes": len(rendered.payload), "encoding": rendered.encoding}
 
     async def _async_verify_unlock(self, client) -> None:
         """Check that the label accepted the unlock, and say so if not.

@@ -161,3 +161,22 @@ async def test_the_preview_stays_available_when_the_label_sleeps(
     state = hass.states.get(ENTITY)
     assert state is not None
     assert state.state != "unavailable"
+
+
+async def test_the_entity_state_is_the_last_update_time(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """An automation can watch this instead of parsing a service response.
+
+    An image entity's state is the timestamp of its last update, so a
+    state trigger on it fires exactly when a send succeeded.
+    """
+    await _setup(hass, config_entry)
+    before = hass.states.get(ENTITY).state
+
+    await _press_test_pattern(hass)
+    await hass.async_block_till_done()
+
+    after = hass.states.get(ENTITY).state
+    assert after != before
+    assert dt_util.parse_datetime(after) is not None
