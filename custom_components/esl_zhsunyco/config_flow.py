@@ -44,7 +44,7 @@ INTERVAL_SELECTOR = selector.NumberSelector(
 class ESLConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle discovery and manual setup of a label."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         """Initialise the flow."""

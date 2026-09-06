@@ -14,6 +14,10 @@ CONF_ADDRESS: Final = "address"
 CONF_MODEL: Final = "model"
 CONF_SCAN_INTERVAL_MIN: Final = "scan_interval_min"
 
+# Keys used by the pre-HACS prototype, kept only for entry migration.
+LEGACY_CONF_MAC: Final = "mac_address"
+LEGACY_CONF_BATTERY_INTERVAL: Final = "battery_scan_interval"
+
 DEFAULT_MODEL: Final = "BLE-35BWRY"
 DEFAULT_SCAN_INTERVAL_MIN: Final = 60
 

@@ -28,6 +28,7 @@ def config_entry() -> MockConfigEntry:
     """Return a configured label with polling disabled."""
     return MockConfigEntry(
         domain=DOMAIN,
+        version=2,
         unique_id=ADDRESS,
         title=f"ESL {ADDRESS}",
         data={CONF_ADDRESS: ADDRESS, CONF_MODEL: "BLE-35BWRY"},

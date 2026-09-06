@@ -10,7 +10,17 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import DOMAIN
+from .const import (
+    CONF_ADDRESS,
+    CONF_MODEL,
+    CONF_SCAN_INTERVAL_MIN,
+    DEFAULT_MODEL,
+    DEFAULT_SCAN_INTERVAL_MIN,
+    DOMAIN,
+    LEGACY_CONF_BATTERY_INTERVAL,
+    LEGACY_CONF_MAC,
+    MODELS,
+)
 from .device import ESLDevice
 from .services import async_setup_services
 
@@ -27,6 +37,71 @@ if TYPE_CHECKING:
     ESLConfigEntry = ConfigEntry[ESLDevice]
 else:
     ESLConfigEntry = ConfigEntry
+
+
+def _legacy_interval_minutes(value: object) -> int:
+    """Convert the prototype's ``HH:MM:SS`` battery interval into minutes."""
+    if isinstance(value, int | float):
+        return max(0, int(value))
+    if isinstance(value, str) and value:
+        parts = value.split(":")
+        try:
+            numbers = [int(part) for part in parts]
+        except ValueError:
+            return DEFAULT_SCAN_INTERVAL_MIN
+        if len(numbers) == 3:
+            hours, minutes, seconds = numbers
+            return max(0, hours * 60 + minutes + seconds // 60)
+        if len(numbers) == 1:
+            return max(0, numbers[0])
+    return DEFAULT_SCAN_INTERVAL_MIN
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate entries written by the pre-HACS prototype.
+
+    Version 1 stored the address under ``mac_address`` in lower case and the
+    poll interval as an ``HH:MM:SS`` string called ``battery_scan_interval``.
+    """
+    if entry.version > 2:
+        # Downgrade from a future version is not something we can handle.
+        return False
+
+    if entry.version == 1:
+        data = dict(entry.data)
+        options = dict(entry.options)
+
+        raw_address = data.pop(LEGACY_CONF_MAC, None) or data.get(CONF_ADDRESS)
+        if not raw_address:
+            _LOGGER.error(
+                "Cannot migrate %s: no Bluetooth address in the config entry",
+                entry.title,
+            )
+            return False
+
+        address = str(raw_address).upper().replace("-", ":")
+        data[CONF_ADDRESS] = address
+
+        model = data.get(CONF_MODEL, DEFAULT_MODEL)
+        data[CONF_MODEL] = model if model in MODELS else DEFAULT_MODEL
+
+        legacy_interval = data.pop(LEGACY_CONF_BATTERY_INTERVAL, None)
+        if legacy_interval is None:
+            legacy_interval = options.pop(LEGACY_CONF_BATTERY_INTERVAL, None)
+        if CONF_SCAN_INTERVAL_MIN not in options:
+            options[CONF_SCAN_INTERVAL_MIN] = _legacy_interval_minutes(legacy_interval)
+
+        hass.config_entries.async_update_entry(
+            entry,
+            data=data,
+            options=options,
+            unique_id=address,
+            title=f"ESL {address}",
+            version=2,
+        )
+        _LOGGER.info("Migrated %s to version 2", address)
+
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ESLConfigEntry) -> bool:

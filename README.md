@@ -41,6 +41,14 @@ Version einen Git-Tag setzen, der zur `version` in `manifest.json` passt:
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
+### Upgrade vom Prototyp
+
+Ein Config-Entry, der noch mit der Vorgängerversion angelegt wurde (Titel im
+Format `ESL 66:66:17:40:27:77 (BLE-35BWRY)`), wird beim ersten Start
+**automatisch migriert** — Adresse, Modell und das alte
+`battery_scan_interval` im Format `HH:MM:SS` werden übernommen (`12:00:00`
+wird zu 720 Minuten). Löschen und neu einrichten ist nicht nötig.
+
 ### Manuelle Installation
 
 `custom_components/esl_zhsunyco/` nach `<config>/custom_components/` kopieren
