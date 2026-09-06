@@ -440,6 +440,19 @@ class ESLDevice:
             _LOGGER.warning("Probe of %s could not connect: %s", self.address, err)
             report["connection"] = "failed"
             report["connection_error"] = f"{type(err).__name__}: {err}"
+            # Without a connection the report is much thinner than it looks,
+            # and it is not obvious which answers are simply absent.
+            report["sections_missing"] = {
+                "reason": "these need a connection and the label was unreachable",
+                "sections": [
+                    "services",
+                    "known_characteristics",
+                    "protocol_family",
+                    "unlock",
+                    "reads",
+                    "mtu_size",
+                ],
+            }
 
         report["address"] = self.address
         report["model"] = self.model
@@ -447,6 +460,7 @@ class ESLDevice:
             CONF_WRITE_MODE, DEFAULT_WRITE_MODE
         )
         report["advertisement"] = {
+            "battery_v": self.battery_v,
             "raw_by_company_id": dict(self.state.advert_raw),
             "decoded": dict(self.state.advert_decoded),
         }

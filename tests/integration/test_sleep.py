@@ -159,3 +159,50 @@ async def test_probe_reports_the_sleep_failure(
 
     assert report["connection"] == "failed"
     assert "did not advertise" in report["connection_error"]
+
+    # A failed probe cannot answer the GATT questions; say so rather than
+    # leaving the reader to notice the sections are absent.
+    missing = report["sections_missing"]["sections"]
+    assert "protocol_family" in missing
+    assert "known_characteristics" in missing
+    assert "reads" in missing
+    for section in missing:
+        assert section not in report, f"{section} present despite no connection"
+
+
+async def test_failed_probe_still_reports_the_battery(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """Advertisement data stays readable when the connection fails."""
+    import struct
+
+    device = await _setup(hass, config_entry)
+    device._advert_received(
+        SimpleNamespace(
+            rssi=-38,
+            manufacturer_data={
+                0xBBAA: struct.pack(">HHHHH", 0x0030, 0x000E, 0x0330, 0x0201, 2978)
+            },
+        ),
+        None,
+    )
+    await hass.async_block_till_done()
+
+    async def fake_process(*args, **kwargs):
+        raise TimeoutError
+
+    with (
+        patch(
+            "custom_components.esl_zhsunyco.device.bluetooth."
+            "async_ble_device_from_address",
+            return_value=None,
+        ),
+        patch(
+            "custom_components.esl_zhsunyco.device.bluetooth."
+            "async_process_advertisements",
+            side_effect=fake_process,
+        ),
+    ):
+        report = await device.async_probe()
+
+    assert report["advertisement"]["battery_v"] == 2.978
