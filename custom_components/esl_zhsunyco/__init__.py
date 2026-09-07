@@ -131,7 +131,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ESLConfigEntry) -> bool:
 async def async_update_options(hass: HomeAssistant, entry: ESLConfigEntry) -> None:
     """Apply changed options without a full reload."""
     device: ESLDevice = entry.runtime_data
-    device.async_update_interval()
+    device.async_apply_options()
     await device.coordinator.async_request_refresh()
 
 

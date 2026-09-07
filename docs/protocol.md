@@ -328,7 +328,29 @@ polling.
 
 ## 7. Image format
 
-### 7.1 Four colour panels (BWRY) **[M]**
+### 7.1 The panel size is not on the wire **[M]**
+
+Nothing in the protocol reports the panel's resolution. The version
+characteristic carries a product ID, but no mapping from that to a
+resolution is known, so an implementation has to be told the size.
+
+Sizes in circulation, for the four colour panels:
+
+| Model | Pixels | Provenance |
+|---|---|---|
+| BLE-35BWRY / BLE-350BWRY | 184 × 384 | **[M]** |
+| BLE-290BWRY | 128 × 296 | reported by another implementation |
+| BLE-750BWRY | 800 × 480 | reported by another implementation |
+
+The two reported sizes come from
+[shorti1996/zhsunyco-esl-wolink](https://github.com/shorti1996/zhsunyco-esl-wolink).
+It expresses the 3.5" panel as 384 × 184 packed column-major, which is the
+same byte sequence as 184 × 384 packed row-major — the two descriptions of
+the measured panel agree. It also applies a mirror and a 90 degree rotation
+to the 2.9" panel, which suggests that panel's scan origin differs; that is
+unverified here.
+
+### 7.2 Four colour panels (BWRY) **[M]**
 
 - **2 bits per pixel**, 4 pixels per byte, **MSB first**, row-major
 - Rows are padded to whole bytes
@@ -347,13 +369,13 @@ Separate bit planes — high plane then low plane — are **not** the format
 this panel uses, and LSB-first ordering is wrong. Both were ruled out by
 measurement. **[M]**
 
-### 7.2 One bit panels **[A]**
+### 7.3 One bit panels **[A]**
 
 1 bit per pixel, 8 per byte, MSB first, rows padded to whole bytes. Which
 bit value means black has not been verified on hardware; in this
 implementation it is the `MONO_BLACK_BIT` constant in `imaging.py`.
 
-### 7.3 Upload procedure (sec. 3.1–3.2) **[M]**
+### 7.4 Upload procedure (sec. 3.1–3.2) **[M]**
 
 ```
 for each chunk:
@@ -387,7 +409,7 @@ document gives none. They are sufficient, not proven minimal. **[A]**
 drops the connection during the physical refresh. That is normal and not an
 error. **[M]**
 
-### 7.4 Compressed upload, `0xA502` (sec. 3.3) **[D?]**
+### 7.5 Compressed upload, `0xA502` (sec. 3.3) **[D?]**
 
 The document names a block compression scheme but does not describe it, so
 it cannot be implemented from the document alone. Uncompressed upload
@@ -405,7 +427,7 @@ through `0xA501` is unaffected.
 5.  read Status; byte 0 must be 0x00         (§4.1)
 6.  sleep 500 ms
 7.  for each 180 byte chunk:
-        write 00 a5 | offset 4B LE | chunk   (§7.3)
+        write 00 a5 | offset 4B LE | chunk   (§7.4)
         sleep 20 ms  (+3 ms every 5th)
 8.  sleep 500 ms
 9.  write 01 a5 | size 4B LE
@@ -428,7 +450,8 @@ success.
 | OTA, `0xA505`–`0xA507` | Documented, deliberately not implemented |
 | Version field rendering | `03 30` could be `3.48`, `48.3` or `3.30` |
 | 1 bit pixel packing | Assumed, no mono panel measured |
-| Panel resolutions other than 184 × 384 | Not in the document at all |
+| Panel resolutions | Not in the document, and not reported by the label |
+| PID to model mapping | One PID known; not enough to map models |
 | Notify on the readable characteristics | Present, purpose unknown, unused |
 | Battery cell type and discharge curve | Not reported; voltage is all there is |
 | Minimum viable upload timing | Working values known, lower bound not probed |

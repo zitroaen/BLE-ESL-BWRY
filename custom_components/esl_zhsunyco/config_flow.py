@@ -16,9 +16,12 @@ from .const import (
     CONF_ADDRESS,
     CONF_BATTERY_EMPTY_MV,
     CONF_BATTERY_FULL_MV,
+    CONF_HEIGHT,
     CONF_LINGER_S,
     CONF_MODEL,
+    CONF_PIXEL_FORMAT,
     CONF_SCAN_INTERVAL_MIN,
+    CONF_WIDTH,
     DEFAULT_BATTERY_EMPTY_MV,
     DEFAULT_BATTERY_FULL_MV,
     DEFAULT_LINGER_S,
@@ -26,6 +29,9 @@ from .const import (
     DEFAULT_SCAN_INTERVAL_MIN,
     DOMAIN,
     MODELS,
+    PANEL_PX_MAX,
+    PANEL_PX_MIN,
+    PIXEL_FORMATS,
 )
 
 MODEL_SELECTOR = selector.SelectSelector(
@@ -45,6 +51,24 @@ LINGER_SELECTOR = selector.NumberSelector(
         step=5,
         unit_of_measurement="s",
         mode=selector.NumberSelectorMode.BOX,
+    )
+)
+
+PANEL_PX_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=PANEL_PX_MIN,
+        max=PANEL_PX_MAX,
+        step=1,
+        unit_of_measurement="px",
+        mode=selector.NumberSelectorMode.BOX,
+    )
+)
+
+PIXEL_FORMAT_SELECTOR = selector.SelectSelector(
+    selector.SelectSelectorConfig(
+        options=list(PIXEL_FORMATS),
+        mode=selector.SelectSelectorMode.DROPDOWN,
+        translation_key="pixel_format",
     )
 )
 
@@ -190,10 +214,20 @@ class ESLOptionsFlow(OptionsFlow):
                         CONF_LINGER_S: int(user_input[CONF_LINGER_S]),
                         CONF_BATTERY_FULL_MV: full,
                         CONF_BATTERY_EMPTY_MV: empty,
+                        CONF_MODEL: user_input[CONF_MODEL],
+                        CONF_WIDTH: int(user_input[CONF_WIDTH]),
+                        CONF_HEIGHT: int(user_input[CONF_HEIGHT]),
+                        CONF_PIXEL_FORMAT: user_input[CONF_PIXEL_FORMAT],
                     }
                 )
 
         options = user_input or self.config_entry.options
+        model = (
+            options.get(CONF_MODEL)
+            or self.config_entry.data.get(CONF_MODEL)
+            or DEFAULT_MODEL
+        )
+        panel = MODELS.get(model, MODELS[DEFAULT_MODEL])
         return self.async_show_form(
             step_id="init",
             errors=errors,
@@ -209,6 +243,17 @@ class ESLOptionsFlow(OptionsFlow):
                         CONF_LINGER_S,
                         default=options.get(CONF_LINGER_S, DEFAULT_LINGER_S),
                     ): LINGER_SELECTOR,
+                    vol.Required(CONF_MODEL, default=model): MODEL_SELECTOR,
+                    vol.Required(
+                        CONF_WIDTH, default=options.get(CONF_WIDTH, 0)
+                    ): PANEL_PX_SELECTOR,
+                    vol.Required(
+                        CONF_HEIGHT, default=options.get(CONF_HEIGHT, 0)
+                    ): PANEL_PX_SELECTOR,
+                    vol.Required(
+                        CONF_PIXEL_FORMAT,
+                        default=options.get(CONF_PIXEL_FORMAT) or str(panel["format"]),
+                    ): PIXEL_FORMAT_SELECTOR,
                     vol.Required(
                         CONF_BATTERY_FULL_MV,
                         default=options.get(

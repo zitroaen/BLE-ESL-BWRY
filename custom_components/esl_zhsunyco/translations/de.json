@@ -38,12 +38,20 @@
           "scan_interval_min": "Abfrageintervall (0 deaktiviert die Abfrage)",
           "linger_s": "Verbindung offen halten (Sekunden)",
           "battery_full_mv": "Batteriespannung bei voll",
-          "battery_empty_mv": "Batteriespannung bei leer"
+          "battery_empty_mv": "Batteriespannung bei leer",
+          "model": "Panel-Modell",
+          "width": "Panel-Breite",
+          "height": "Panel-Höhe",
+          "pixel_format": "Farbtiefe"
         },
         "data_description": {
           "linger_s": "Wie lange die Bluetooth-Verbindung nach einem Kommando gehalten wird. Ein neuer Verbindungsaufbau bedeutet erneutes Warten auf ein Advertisement, was Minuten dauert — ein kurzes Offenhalten macht Folgekommandos daher sofort wirksam. 0 trennt sofort.",
           "battery_full_mv": "Spannung einer frischen Zelle. 3000 mV passen zur 3-V-Lithium-Knopfzelle, die in diesen Labels steckt.",
-          "battery_empty_mv": "Spannung, bei der das Label aufhört zu arbeiten. Der Prozentwert wird dazwischen interpoliert und ist eine Schätzung, kein Messwert."
+          "battery_empty_mv": "Spannung, bei der das Label aufhört zu arbeiten. Der Prozentwert wird dazwischen interpoliert und ist eine Schätzung, kein Messwert.",
+          "model": "Legt die Standardgröße fest. Das nächstliegende wählen und die Größe unten korrigieren, falls es nicht passt.",
+          "width": "0 übernimmt die Breite vom Modell. Für ein nicht gelistetes Panel direkt eintragen.",
+          "height": "0 übernimmt die Höhe vom Modell.",
+          "pixel_format": "bwry sind vier Farben mit 2 Bit pro Pixel, mono ist Schwarzweiß mit 1 Bit."
         }
       }
     },
@@ -242,6 +250,14 @@
           "name": "Dithering",
           "description": "Floyd-Steinberg-Dithering anwenden."
         }
+      }
+    }
+  },
+  "selector": {
+    "pixel_format": {
+      "options": {
+        "bwry": "Vier Farben (schwarz, weiß, gelb, rot)",
+        "mono": "Schwarzweiß"
       }
     }
   }

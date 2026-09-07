@@ -137,30 +137,59 @@ ERROR_CODES: Final[dict[int, str]] = {
 }
 
 # --- Panels ---------------------------------------------------------------
-# Resolutions are NOT part of the vendor document; they come from the label
-# hardware itself and may need adjusting for your unit.
-# "format" selects the pixel packer in imaging.py and is a best guess from the
-# model name, not something the vendor document states.
+# Resolutions are NOT in the vendor document. They come from the hardware.
+#
+# BLE-35BWRY is measured here: 184 px per row is what makes a row 46 bytes
+# at 2 bits per pixel, and 46 x 384 is the 17664 byte full screen that was
+# transferred successfully. See docs/hardware-verified-findings.md section 4.
+#
+# The other two come from an independent WOLINK implementation,
+# https://github.com/shorti1996/zhsunyco-esl-wolink, which lists them as
+# 296x128 and 800x480. That is second-hand: better than a guess, weaker
+# than a measurement, and marked "reported" in the picker for that reason.
+# It lists the 3.5" panel as 384x184 packed column-major, which is the same
+# bytes as 184x384 packed row-major - the two descriptions agree.
+#
+# That implementation also applies a mirror and a 90 degree rotation to the
+# 2.9" panel, which suggests its scan origin differs. If a picture comes out
+# mirrored or rotated on one, the mirror and rotate options on set_image are
+# the fix; nothing is applied automatically, because it has not been
+# verified here.
+#
+# "format" selects the pixel packer in imaging.py.
 MODELS: Final[dict[str, dict[str, int | str]]] = {
     "BLE-35BWRY": {
         "width": 184,
         "height": 384,
         "format": "bwry",
-        "desc": '3.5" portrait (BWRY)',
+        "desc": '3.5" portrait, 4 colour (also sold as BLE-350BWRY)',
     },
-    "ET0420": {
-        "width": 400,
-        "height": 300,
-        "format": "mono",
-        "desc": '4.2" landscape',
+    "BLE-290BWRY": {
+        "width": 128,
+        "height": 296,
+        "format": "bwry",
+        "desc": '2.9", 4 colour (reported, not verified here)',
     },
-    "ET0290": {
-        "width": 296,
-        "height": 128,
-        "format": "mono",
-        "desc": '2.9" landscape',
+    "BLE-750BWRY": {
+        "width": 800,
+        "height": 480,
+        "format": "bwry",
+        "desc": '7.5", 4 colour (reported, not verified here)',
     },
 }
+
+# Pixel packers imaging.py can produce.
+PIXEL_FORMATS: Final = ("bwry", "mono")
+
+# Panel geometry overrides. A label whose model is not in the list above -
+# and there are many - only needs its size to work, so it can be entered
+# directly instead of waiting for a preset. 0 means "take it from the
+# model".
+CONF_WIDTH: Final = "width"
+CONF_HEIGHT: Final = "height"
+CONF_PIXEL_FORMAT: Final = "pixel_format"
+PANEL_PX_MIN: Final = 0
+PANEL_PX_MAX: Final = 2048
 
 DEFAULT_PIXEL_FORMAT: Final = "mono"
 

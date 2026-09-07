@@ -38,12 +38,20 @@
           "scan_interval_min": "Poll interval (0 disables polling)",
           "linger_s": "Keep connection open (seconds)",
           "battery_full_mv": "Battery voltage when full",
-          "battery_empty_mv": "Battery voltage when empty"
+          "battery_empty_mv": "Battery voltage when empty",
+          "model": "Panel model",
+          "width": "Panel width",
+          "height": "Panel height",
+          "pixel_format": "Colour depth"
         },
         "data_description": {
           "linger_s": "How long to hold the Bluetooth connection after a command. Reconnecting means waiting for the label to advertise again, which takes minutes, so a short linger makes follow-up commands instant. 0 disconnects immediately.",
           "battery_full_mv": "Voltage of a fresh cell. 3000 mV suits the 3 V lithium coin cell these labels ship with.",
-          "battery_empty_mv": "Voltage at which the label stops working. The percentage is interpolated between the two and is an estimate, not a reading."
+          "battery_empty_mv": "Voltage at which the label stops working. The percentage is interpolated between the two and is an estimate, not a reading.",
+          "model": "Sets the default size. Pick the closest one and correct the size below if it does not match.",
+          "width": "0 takes the width from the model. Set it directly for a panel that is not listed.",
+          "height": "0 takes the height from the model.",
+          "pixel_format": "bwry is four colours at 2 bits per pixel, mono is black and white at 1 bit."
         }
       }
     },
@@ -242,6 +250,14 @@
           "name": "Dither",
           "description": "Apply Floyd-Steinberg dithering."
         }
+      }
+    }
+  },
+  "selector": {
+    "pixel_format": {
+      "options": {
+        "bwry": "Four colour (black, white, yellow, red)",
+        "mono": "Black and white"
       }
     }
   }

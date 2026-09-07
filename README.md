@@ -7,8 +7,9 @@ Put pictures on a battery-powered BLE e-ink shelf label from Home
 Assistant — a calendar, a dashboard, a name plate — and drive its LED.
 
 Works with labels running Wolink / Zhsunyco firmware, such as the
-`BLE-35BWRY` (184 × 384, black/white/red/yellow). Local Bluetooth adapters
-and ESPHome Bluetooth proxies are both supported.
+`BLE-35BWRY` (184 × 384, black/white/red/yellow). Other sizes work too —
+see [Panel size](#panel-size). Local Bluetooth adapters and ESPHome
+Bluetooth proxies are both supported.
 
 **This is the user manual.** The interface itself is specified separately in
 [`docs/protocol.md`](docs/protocol.md), and the measurements behind it are in
@@ -74,6 +75,10 @@ Two options are worth knowing about:
 version. Battery and version numbers arrive passively without a connection,
 so a long interval is fine. `0` disables the poll entirely.
 
+**Panel model** sets the size pictures are rendered at. If yours is not in
+the list, or the list has it wrong, **Panel width / height / colour depth**
+override it — see [Panel size](#panel-size) below.
+
 **Battery voltage when full / when empty** set the range the percentage is
 interpolated between — see [Battery level](#battery-level) below.
 
@@ -94,6 +99,47 @@ the label — not even Home Assistant.
 | RGB on/off time, RGB duration | Number | blink parameters |
 | Clear screen, test pattern, diagnostic probe | Button | one press each |
 | Signal strength, display version, product ID | Sensor | diagnostic, off by default |
+
+## Panel size
+
+These labels are sold in several sizes, and the size is not something the
+label reports — it has to be configured. Three presets are built in:
+
+| Model | Size | Pixels | Colours |
+|---|---|---|---|
+| `BLE-35BWRY` | 3.5" | 184 × 384 | four |
+| `BLE-290BWRY` | 2.9" | 128 × 296 | four |
+| `BLE-750BWRY` | 7.5" | 800 × 480 | four |
+
+Only the 3.5" one is measured here. The other two come from
+[shorti1996/zhsunyco-esl-wolink](https://github.com/shorti1996/zhsunyco-esl-wolink),
+an independent implementation of the same protocol — better than a guess,
+but not verified against hardware in this project.
+
+**For anything else, set the size directly.** Panel width, height and
+colour depth are options; leave width and height at `0` to take them from
+the model. A label that is not in the list needs nothing more than its
+pixel dimensions to work.
+
+All of this can be changed after setup, so picking the wrong model does not
+mean deleting and re-adding the label.
+
+### If the picture comes out wrong
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Diagonal shearing, smeared gratings | Wrong width | Correct the width |
+| Only part of the panel is drawn | Wrong height | Correct the height |
+| Speckled where it should be flat | Dithering | `dither: false` |
+| Mirrored or rotated | The panel's scan origin | `mirror` / `rotate` on `set_image` |
+
+Send the `diagnostic` test pattern first — it is built to make exactly
+these visible.
+
+The last row is worth expecting on the 2.9" panel: the implementation
+linked above applies a mirror and a 90° rotation to it, which suggests its
+origin differs from the 3.5" one. Nothing is applied automatically here,
+because it has not been verified.
 
 ## Battery level
 

@@ -26,9 +26,12 @@ from .const import (
     CONF_ADDRESS,
     CONF_BATTERY_EMPTY_MV,
     CONF_BATTERY_FULL_MV,
+    CONF_HEIGHT,
     CONF_LINGER_S,
     CONF_MODEL,
+    CONF_PIXEL_FORMAT,
     CONF_SCAN_INTERVAL_MIN,
+    CONF_WIDTH,
     DEFAULT_BATTERY_EMPTY_MV,
     DEFAULT_BATTERY_FULL_MV,
     DEFAULT_LINGER_S,
@@ -160,10 +163,7 @@ class ESLDevice:
         self.address: str = entry.data[CONF_ADDRESS].upper()
         self.model: str = entry.data.get(CONF_MODEL, DEFAULT_MODEL)
 
-        panel = MODELS.get(self.model, MODELS[DEFAULT_MODEL])
-        self.width = int(panel["width"])
-        self.height = int(panel["height"])
-        self.pixel_format = str(panel.get("format", DEFAULT_PIXEL_FORMAT))
+        self._apply_panel_geometry()
 
         self.state = ESLState()
         self._lock = asyncio.Lock()
@@ -191,6 +191,30 @@ class ESLDevice:
     def linger_seconds(self) -> int:
         """How long to hold the connection open after a command."""
         return int(self.entry.options.get(CONF_LINGER_S, DEFAULT_LINGER_S))
+
+    @callback
+    def _apply_panel_geometry(self) -> None:
+        """Work out the panel size, preferring an explicit override.
+
+        The model presets cover the panels whose size is known. Everything
+        else - and this hardware is sold in many sizes - only needs its
+        width, height and colour depth entered, which is why those are
+        options rather than a code change.
+        """
+        options = self.entry.options
+        model = str(options.get(CONF_MODEL, self.model))
+        panel = MODELS.get(model, MODELS[DEFAULT_MODEL])
+        self.model = model
+
+        width = int(options.get(CONF_WIDTH, 0) or 0)
+        height = int(options.get(CONF_HEIGHT, 0) or 0)
+        self.width = width or int(panel["width"])
+        self.height = height or int(panel["height"])
+        self.pixel_format = str(
+            options.get(CONF_PIXEL_FORMAT)
+            or panel.get("format")
+            or DEFAULT_PIXEL_FORMAT
+        )
 
     @property
     def battery_percent(self) -> int | None:
@@ -357,6 +381,13 @@ class ESLDevice:
         self._cancel_linger_timer()
         await self._async_disconnect()
 
+    @callback
+    def async_apply_options(self) -> None:
+        """Re-read the options that do not need a reconnect."""
+        self._apply_panel_geometry()
+        self.async_update_interval()
+
+    @callback
     def async_update_interval(self) -> None:
         """Apply a changed poll interval from the options flow."""
         self.coordinator.update_interval = self._poll_interval()
