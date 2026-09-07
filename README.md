@@ -445,6 +445,30 @@ Two fields say the most:
 - `reads.status.error_meaning` — `unlock_failed` means the label rejected
   authentication; anything else means that part worked.
 
+### A command failed and the message is one word
+
+`Timeout` or `Unknown error` on their own used to be all you got: Home
+Assistant shows whatever the service raised, and several failures here
+carry no text. Since 0.29.2 a failure names the label, the step and the
+elapsed time, for example:
+
+```
+66:66:17:40:27:77: send_image (891 bytes) failed while writing the command
+after 34s - TimeoutError: no detail
+```
+
+The step is the useful part:
+
+| Step | What was happening |
+|---|---|
+| `connecting` | Waiting for the label to advertise, then opening the link |
+| `reading the status` | Connected, reading the status byte before the command |
+| `writing the command` | The command or the image chunks going out |
+| `watching for the refresh` | Waiting for the panel to report busy and finish |
+
+The same fields are in the diagnostics download under `last_command`, as
+`phase` and `elapsed_s`.
+
 **Settings → Devices & services → Zhsunyco ESL → Download diagnostics**
 gives you a JSON file with everything the integration knows, including
 `last_command` — what the last command did, and whether the panel reacted —

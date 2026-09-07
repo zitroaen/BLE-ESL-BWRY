@@ -141,7 +141,8 @@ async def test_failed_command_drops_the_connection(
             "custom_components.esl_zhsunyco.device.protocol.clear_screen",
             side_effect=OSError("link lost"),
         ),
-        contextlib.suppress(OSError),
+        # The failure is wrapped with context before it leaves the device.
+        contextlib.suppress(Exception),
     ):
         await device.async_clear_screen()
 

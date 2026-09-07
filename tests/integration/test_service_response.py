@@ -5,7 +5,9 @@ from __future__ import annotations
 import contextlib
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.util import dt as dt_util
 
@@ -200,3 +202,73 @@ async def test_a_failed_write_still_raises(
         raised = "hung up" in str(err)
 
     assert raised, "a failing write has to surface as an error"
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (TimeoutError(), "TimeoutError"),
+        (OSError(), "OSError"),
+        (ValueError("something specific"), "something specific"),
+    ],
+    ids=["bare timeout", "bare oserror", "with a message"],
+)
+async def test_a_failure_says_what_and_when(
+    hass: HomeAssistant, config_entry, mock_bluetooth, error, expected
+) -> None:
+    """Home Assistant shows whatever escapes, so it has to be legible.
+
+    A bare TimeoutError reaches the frontend as the single word "Timeout",
+    and a bare OSError as "Unknown error" - neither says which step failed
+    or how long it took.
+    """
+    device = await _setup(hass, config_entry)
+    label = FakeLabel(reacts=True)
+
+    async def boom(uuid, data, response=None):
+        raise error
+
+    label.write_gatt_char = boom
+
+    with pytest.raises(HomeAssistantError) as caught:
+        await _call(
+            hass,
+            SERVICE_CLEAR_SCREEN,
+            {"device_id": _device_id(hass, config_entry)},
+            label,
+            device,
+        )
+
+    message = str(caught.value)
+    assert device.address in message
+    assert "clear_screen" in message
+    assert "writing the command" in message, "which step failed"
+    assert expected in message
+    assert message != "Timeout"
+
+
+async def test_the_record_keeps_the_step_and_the_duration(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """Diagnostics has to carry the same context as the error message."""
+    device = await _setup(hass, config_entry)
+    label = FakeLabel(reacts=True)
+
+    async def boom(uuid, data, response=None):
+        raise TimeoutError
+
+    label.write_gatt_char = boom
+
+    with contextlib.suppress(HomeAssistantError):
+        await _call(
+            hass,
+            SERVICE_CLEAR_SCREEN,
+            {"device_id": _device_id(hass, config_entry)},
+            label,
+            device,
+        )
+
+    record = device.state.last_command
+    assert record["result"] == "failed"
+    assert record["phase"] == "writing the command"
+    assert isinstance(record["elapsed_s"], float)

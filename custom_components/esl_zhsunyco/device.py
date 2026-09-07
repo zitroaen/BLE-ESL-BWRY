@@ -665,6 +665,26 @@ class ESLDevice:
     # Commands
     # ------------------------------------------------------------------
 
+    def _reportable(
+        self, kind: str, phase: str, elapsed: float, err: Exception
+    ) -> Exception:
+        """Give a failure enough context to be acted on.
+
+        Home Assistant turns whatever escapes a service call into what the
+        user sees, and several of the exceptions this path can raise carry
+        no text at all: a bare TimeoutError becomes the single word
+        "Timeout", which says nothing about what timed out or when. So
+        anything that is not already a HomeAssistantError is wrapped with
+        the label, the step and how long it took.
+        """
+        if isinstance(err, HomeAssistantError):
+            return err
+        detail = str(err).strip() or "no detail"
+        return HomeAssistantError(
+            f"{self.address}: {kind} failed while {phase} after "
+            f"{elapsed:.0f}s - {type(err).__name__}: {detail}"
+        )
+
     @callback
     def _record_command(
         self,
@@ -675,6 +695,8 @@ class ESLDevice:
         status_before: dict[str, Any] | None = None,
         status_after: dict[str, Any] | None = None,
         dropped: bool = False,
+        phase: str | None = None,
+        elapsed_s: float | None = None,
     ) -> dict[str, Any]:
         """Remember how the last command went, and hand the record back.
 
@@ -688,6 +710,10 @@ class ESLDevice:
             "result": "ok" if ok else "failed",
             "detail": detail,
         }
+        if phase is not None:
+            record["phase"] = phase
+        if elapsed_s is not None:
+            record["elapsed_s"] = round(elapsed_s, 1)
         if status_before is not None or status_after is not None:
             record["status_before"] = status_before
             record["status_after"] = status_after
@@ -739,17 +765,27 @@ class ESLDevice:
             # discards the connection, so the retry would otherwise have
             # nothing left whose cache it could clear.
             used: BleakClientWithServiceCache | None = None
+            # Which step we are on, so a failure can say where it happened.
+            phase = "connecting"
+            started = time.monotonic()
             try:
                 async with self.connection() as client:
                     used = client
+                    phase = "reading the status"
                     before = await _read_status(client)
+                    phase = "writing the command"
                     await action(client)
+                    phase = "watching for the refresh"
                     after = await _watch_status(client)
                 break
             except BleakCharacteristicNotFoundError as err:
                 if attempt == 2:
                     self._record_command(
-                        kind, ok=False, detail=f"{type(err).__name__}: {err}"
+                        kind,
+                        ok=False,
+                        detail=f"{type(err).__name__}: {err}",
+                        phase=phase,
+                        elapsed_s=time.monotonic() - started,
                     )
                     raise
                 _LOGGER.warning(
@@ -760,10 +796,15 @@ class ESLDevice:
                 )
                 await self._drop_connection_and_clear_cache(used)
             except Exception as err:
+                elapsed = time.monotonic() - started
                 self._record_command(
-                    kind, ok=False, detail=f"{type(err).__name__}: {err}"
+                    kind,
+                    ok=False,
+                    detail=f"{type(err).__name__}: {err}",
+                    phase=phase,
+                    elapsed_s=elapsed,
                 )
-                raise
+                raise self._reportable(kind, phase, elapsed, err) from err
 
         dropped = not self.connected
         record = self._record_command(

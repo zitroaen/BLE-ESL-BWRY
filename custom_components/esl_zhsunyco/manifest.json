@@ -19,5 +19,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/zitroaen/BLE-ESL-BWRY/issues",
   "requirements": ["bleak-retry-connector>=3.5.0", "Pillow>=10.0.0"],
-  "version": "0.29.1"
+  "version": "0.29.2"
 }

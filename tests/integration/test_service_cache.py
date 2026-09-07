@@ -148,7 +148,7 @@ async def test_command_failure_is_recorded(
             "custom_components.esl_zhsunyco.device.protocol.clear_screen",
             side_effect=OSError("Characteristic ... was not found!"),
         ),
-        pytest.raises(OSError),
+        pytest.raises(HomeAssistantError, match="was not found"),
     ):
         await device.async_clear_screen()
 
@@ -156,6 +156,9 @@ async def test_command_failure_is_recorded(
     assert device.state.last_command["kind"] == "clear_screen"
     assert device.state.last_command["result"] == "failed"
     assert "was not found" in device.state.last_command["detail"]
+    # And the record says where it happened, which "Timeout" alone never did.
+    assert device.state.last_command["phase"] == "writing the command"
+    assert device.state.last_command["elapsed_s"] >= 0
 
 
 async def test_command_success_is_recorded(
