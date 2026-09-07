@@ -61,7 +61,6 @@ def _render(**kwargs) -> bytes:
     return imaging.render_image(request, WIDTH, HEIGHT).payload
 
 
-
 def test_solid_black_packs_to_a_constant():
     """The simplest possible check that the packer is not scrambling."""
     request = imaging.ImageRequest(

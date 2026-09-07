@@ -26,6 +26,7 @@ from .const import (
     CONF_ADDRESS,
     CONF_BATTERY_EMPTY_MV,
     CONF_BATTERY_FULL_MV,
+    CONF_COMPRESS,
     CONF_HEIGHT,
     CONF_LINGER_S,
     CONF_MODEL,
@@ -34,6 +35,7 @@ from .const import (
     CONF_WIDTH,
     DEFAULT_BATTERY_EMPTY_MV,
     DEFAULT_BATTERY_FULL_MV,
+    DEFAULT_COMPRESS,
     DEFAULT_LINGER_S,
     DEFAULT_MODEL,
     DEFAULT_PIXEL_FORMAT,
@@ -219,6 +221,38 @@ class ESLDevice:
             or panel.get("format")
             or DEFAULT_PIXEL_FORMAT
         )
+
+    def _compressed_or_raw(self, data: bytes) -> tuple[bytes, bool]:
+        """Decide whether this image is worth sending compressed.
+
+        Deflate can make incompressible input larger, and a payload that
+        grew is strictly worse: more chunks, longer in the connection slot,
+        no benefit. So the compressed form is only used when it is actually
+        shorter, and a compressor that refuses outright falls back rather
+        than failing the send.
+        """
+        if not self.entry.options.get(CONF_COMPRESS, DEFAULT_COMPRESS):
+            return data, False
+
+        try:
+            packed = protocol.compress_image(data)
+        except Exception as err:  # noqa: BLE001 - compression is an optimisation
+            _LOGGER.warning(
+                "%s: could not compress the image, sending it raw: %s",
+                self.address,
+                err,
+            )
+            return data, False
+
+        if len(packed) >= len(data):
+            _LOGGER.debug(
+                "%s: compression would grow the image (%d -> %d), sending raw",
+                self.address,
+                len(data),
+                len(packed),
+            )
+            return data, False
+        return packed, True
 
     @property
     def battery_percent(self) -> int | None:
@@ -818,10 +852,12 @@ class ESLDevice:
         rendered = await self.hass.async_add_executor_job(
             render_image, request, self.width, self.height
         )
+        raw = rendered.payload
+        payload, compressed = self._compressed_or_raw(raw)
         record = await self._run_command(
-            f"send_image ({len(rendered.payload)} bytes)",
-            lambda client: protocol.send_image(
-                client, rendered.payload, compressed=False
+            f"send_image ({len(payload)} bytes)",
+            lambda client: protocol.send_prepared_image(
+                client, payload, compressed=compressed
             ),
         )
         # Only after the upload actually went through: the preview claims to
@@ -842,7 +878,13 @@ class ESLDevice:
         _LOGGER.debug(
             "%s image uploaded (%d bytes)", self.address, len(rendered.payload)
         )
-        return {**record, "bytes": len(rendered.payload), "encoding": rendered.encoding}
+        return {
+            **record,
+            "bytes": len(raw),
+            "sent_bytes": len(payload),
+            "compressed": compressed,
+            "encoding": rendered.encoding,
+        }
 
     async def _async_verify_unlock(self, client) -> None:
         """Check that the label accepted the unlock, and say so if not.

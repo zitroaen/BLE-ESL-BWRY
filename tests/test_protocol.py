@@ -159,6 +159,7 @@ def test_send_image_compressed_uses_a502():
 
 # --- section 3.9 / 3.10: multi screen ------------------------------------
 
+
 def test_read_version():
     """PID, AppVer, HwVer, DispVer are four little endian words."""
     raw = struct.pack("<HHHH", 0x1234, 0x0102, 0x0203, 0x0304)

@@ -42,7 +42,8 @@
           "model": "Panel-Modell",
           "width": "Panel-Breite",
           "height": "Panel-Höhe",
-          "pixel_format": "Farbtiefe"
+          "pixel_format": "Farbtiefe",
+          "compress": "Bilder komprimieren"
         },
         "data_description": {
           "linger_s": "Wie lange die Bluetooth-Verbindung nach einem Kommando gehalten wird. Ein neuer Verbindungsaufbau bedeutet erneutes Warten auf ein Advertisement, was Minuten dauert — ein kurzes Offenhalten macht Folgekommandos daher sofort wirksam. 0 trennt sofort.",
@@ -51,7 +52,8 @@
           "model": "Legt die Standardgröße fest. Das nächstliegende wählen und die Größe unten korrigieren, falls es nicht passt.",
           "width": "0 übernimmt die Breite vom Modell. Für ein nicht gelistetes Panel direkt eintragen.",
           "height": "0 übernimmt die Höhe vom Modell.",
-          "pixel_format": "bwry sind vier Farben mit 2 Bit pro Pixel, mono ist Schwarzweiß mit 1 Bit."
+          "pixel_format": "bwry sind vier Farben mit 2 Bit pro Pixel, mono ist Schwarzweiß mit 1 Bit.",
+          "compress": "Überträgt ein Vollbild als wenige hundert Byte statt in voller Größe, die Verbindung bleibt dadurch viel kürzer offen. Ausschalten, falls ein Panel komprimierte Uploads ablehnt."
         }
       }
     },

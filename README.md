@@ -36,10 +36,10 @@ command is always the slow one — see
 | Drive the RGB LED | colour, blink rate, duration |
 | Read battery and status | without connecting, from the advertisement |
 | Watch the charge level | in percent, for a low-battery automation |
+| Send a picture in seconds | uploads are compressed, typically to about 5 % |
 
 Not supported: firmware updates over the air, and storing several images in
-the label to switch between. Compressed upload is not used because the
-vendor never documented the compression scheme.
+the label to switch between.
 
 ## Installation
 
@@ -221,8 +221,19 @@ Only `http` and `https` are accepted, the download times out after 30
 seconds, and anything over 8 MB is refused.
 
 You do not have to prepare the picture. It is fitted to the panel, dithered
-onto the four colours the hardware can display, and packed for upload. A
-full screen takes about half a minute once the connection is up.
+onto the four colours the hardware can display, packed and compressed for
+upload.
+
+**Compression is on by default and matters more than it sounds.** A full
+3.5" screen is 17664 bytes raw; compressed, real images came out at 830 to
+1100 bytes — around 5 %. Since the label has to be awake and connected for
+the whole transfer, and a connected label is invisible to everything else,
+a shorter upload is the single biggest improvement available here. It
+turns roughly half a minute of transfer into a couple of seconds.
+
+If a panel refuses compressed uploads, **Compress images** in the options
+turns it off. Images that would grow under compression — a photo dithered
+into noise, say — are sent uncompressed automatically.
 
 For graphics with large flat areas — text, tables, a calendar — set
 `dither: false`. Dithering speckles solid colour, which looks worse than it
@@ -282,7 +293,9 @@ results:
     label_reacted: true   # the panel reported busy, so it really drew
     connection_dropped: false
     error_code: 0
-    bytes: 17664
+    bytes: 17664          # the image
+    sent_bytes: 891       # what actually went over the air
+    compressed: true
     at: "2026-09-06T19:12:04.881+00:00"
 ```
 

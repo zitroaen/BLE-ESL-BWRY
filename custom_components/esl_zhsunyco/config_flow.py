@@ -16,6 +16,7 @@ from .const import (
     CONF_ADDRESS,
     CONF_BATTERY_EMPTY_MV,
     CONF_BATTERY_FULL_MV,
+    CONF_COMPRESS,
     CONF_HEIGHT,
     CONF_LINGER_S,
     CONF_MODEL,
@@ -24,6 +25,7 @@ from .const import (
     CONF_WIDTH,
     DEFAULT_BATTERY_EMPTY_MV,
     DEFAULT_BATTERY_FULL_MV,
+    DEFAULT_COMPRESS,
     DEFAULT_LINGER_S,
     DEFAULT_MODEL,
     DEFAULT_SCAN_INTERVAL_MIN,
@@ -219,6 +221,7 @@ class ESLOptionsFlow(OptionsFlow):
                         CONF_WIDTH: int(user_input[CONF_WIDTH]),
                         CONF_HEIGHT: int(user_input[CONF_HEIGHT]),
                         CONF_PIXEL_FORMAT: user_input[CONF_PIXEL_FORMAT],
+                        CONF_COMPRESS: user_input[CONF_COMPRESS],
                     }
                 )
 
@@ -256,6 +259,10 @@ class ESLOptionsFlow(OptionsFlow):
                         CONF_PIXEL_FORMAT,
                         default=options.get(CONF_PIXEL_FORMAT) or str(panel["format"]),
                     ): PIXEL_FORMAT_SELECTOR,
+                    vol.Required(
+                        CONF_COMPRESS,
+                        default=options.get(CONF_COMPRESS, DEFAULT_COMPRESS),
+                    ): selector.BooleanSelector(),
                     vol.Required(
                         CONF_BATTERY_FULL_MV,
                         default=options.get(

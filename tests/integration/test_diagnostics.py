@@ -15,6 +15,8 @@ from custom_components.esl_zhsunyco.const import (
     MANUFACTURER_ID,
 )
 
+from .conftest import raw_payload
+
 
 async def _setup(hass: HomeAssistant, entry):
     entry.add_to_hass(hass)
@@ -234,7 +236,7 @@ async def test_test_pattern_button_uploads_panel_sized_data(
 
     with (
         patch(
-            "custom_components.esl_zhsunyco.device.protocol.send_image",
+            "custom_components.esl_zhsunyco.device.protocol.send_prepared_image",
             new=fake_send_image,
         ),
         patch(
@@ -254,8 +256,8 @@ async def test_test_pattern_button_uploads_panel_sized_data(
         )
 
     assert len(uploaded) == 1
-    # BLE-35BWRY is 184x384 and defaults to two bits per pixel.
-    assert len(uploaded[0]) == 184 * 384 // 4
+    # BLE-350BWRY is 184x384 at two bits per pixel.
+    assert len(raw_payload(uploaded[0])) == 184 * 384 // 4
 
 
 async def test_the_panel_model_decides_the_packing(
@@ -287,7 +289,7 @@ async def test_the_panel_model_decides_the_packing(
 
     with (
         patch(
-            "custom_components.esl_zhsunyco.device.protocol.send_image",
+            "custom_components.esl_zhsunyco.device.protocol.send_prepared_image",
             new=fake_send_image,
         ),
         patch(
@@ -310,4 +312,4 @@ async def test_the_panel_model_decides_the_packing(
         )
 
     assert len(uploaded) == 1
-    assert len(uploaded[0]) == 184 * 384 // 4
+    assert len(raw_payload(uploaded[0])) == 184 * 384 // 4

@@ -242,6 +242,15 @@ MODEL_ALIASES: Final[dict[str, str]] = {
     "ET0420": "BLE-420BWRY",
 }
 
+# Whether to send images through the block compression 0xA502 expects.
+# On by default: a compressed full screen was 5-6% of the raw size on
+# hardware, and the connection slot is the bottleneck for everything here,
+# so a shorter transfer is the single biggest win available. An option
+# because it is verified on one panel, and a model that rejects it should
+# not need a new release to work.
+CONF_COMPRESS: Final = "compress"
+DEFAULT_COMPRESS: Final = True
+
 # Pixel packers imaging.py can produce.
 PIXEL_FORMATS: Final = ("bwry", "mono")
 

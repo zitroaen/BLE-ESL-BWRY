@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
+import zlib
 from dataclasses import dataclass
 
 from bleak import BleakClient
@@ -246,19 +247,135 @@ async def _store_blocks(
     _LOGGER.debug("Uploaded %d bytes in %d byte chunks", len(body), size)
 
 
+# --- Block compression (sec. 3.3) ----------------------------------------
+# The document names "Block Compressed Picture" for 0xA502 and describes
+# nothing else. The scheme is raw DEFLATE over fixed size blocks:
+#
+#   A5 A6 <block count 1B> 02
+#   per block:  <index 1B, 1-based>  <compressed size 2B LE>  <deflate data>
+#
+# Each block holds up to COMPRESSION_BLOCK_SIZE bytes of UNCOMPRESSED image
+# data. "Raw" DEFLATE means no zlib header and no Adler-32 trailer, which is
+# what a negative window size selects. Byte 3 is a fixed marker, not a count.
+#
+# The wire format was established by interoperability with a second WOLINK
+# implementation and confirmed twice on a physical BLE-35BWRY. The encoder
+# below is written from that description alone: the other implementation is
+# GPLv3 and this project is MIT, so none of its code is reused here. A byte
+# layout needed to talk to someone else's device is an interoperability
+# fact, which is the same basis the rest of this file rests on.
+COMPRESSION_HEADER = b"\xa5\xa6"
+COMPRESSION_FORMAT_MARKER = 0x02
+COMPRESSION_BLOCK_SIZE = 8192
+_MAX_BLOCKS = 255
+# 2 bytes hold the per-block compressed size.
+_MAX_BLOCK_COMPRESSED = 0xFFFF
+
+
+def compress_image(data: bytes, level: int = 9) -> bytes:
+    """Pack image bytes into the block compressed form 0xA502 expects.
+
+    Deflate can expand incompressible input, so a block that came out larger
+    than the field can describe is a hard error rather than a silent
+    truncation - the caller sends the image uncompressed instead.
+    """
+    if not data:
+        raise ESLProtocolError("nothing to compress")
+
+    blocks = [
+        data[offset : offset + COMPRESSION_BLOCK_SIZE]
+        for offset in range(0, len(data), COMPRESSION_BLOCK_SIZE)
+    ]
+    if len(blocks) > _MAX_BLOCKS:
+        raise ESLProtocolError(
+            f"{len(data)} bytes need {len(blocks)} blocks, "
+            f"the count field holds {_MAX_BLOCKS}"
+        )
+
+    out = bytearray(COMPRESSION_HEADER)
+    out.append(len(blocks))
+    out.append(COMPRESSION_FORMAT_MARKER)
+
+    for index, block in enumerate(blocks, start=1):
+        compressor = zlib.compressobj(level, zlib.DEFLATED, -zlib.MAX_WBITS)
+        payload = compressor.compress(block) + compressor.flush()
+        if len(payload) > _MAX_BLOCK_COMPRESSED:
+            raise ESLProtocolError(
+                f"block {index} compressed to {len(payload)} bytes, "
+                f"the size field holds {_MAX_BLOCK_COMPRESSED}"
+            )
+        out.append(index)
+        out.extend(struct.pack("<H", len(payload)))
+        out.extend(payload)
+
+    _LOGGER.debug(
+        "Compressed %d bytes into %d (%.1f%%) across %d blocks",
+        len(data),
+        len(out),
+        100 * len(out) / len(data),
+        len(blocks),
+    )
+    return bytes(out)
+
+
+def decompress_image(payload: bytes) -> bytes:
+    """Reverse compress_image. Only used to check the encoder in tests."""
+    if len(payload) < 4 or not payload.startswith(COMPRESSION_HEADER):
+        raise ESLProtocolError("not a block compressed payload")
+    if payload[3] != COMPRESSION_FORMAT_MARKER:
+        raise ESLProtocolError(f"unknown format marker 0x{payload[3]:02x}")
+
+    count = payload[2]
+    out = bytearray()
+    offset = 4
+    for expected_index in range(1, count + 1):
+        if offset + 3 > len(payload):
+            raise ESLProtocolError(f"payload ends inside block {expected_index}")
+        index = payload[offset]
+        (size,) = struct.unpack_from("<H", payload, offset + 1)
+        offset += 3
+        if index != expected_index:
+            raise ESLProtocolError(f"block index {index}, expected {expected_index}")
+        chunk = payload[offset : offset + size]
+        if len(chunk) != size:
+            raise ESLProtocolError(f"block {index} is truncated")
+        offset += size
+        out.extend(zlib.decompress(chunk, -zlib.MAX_WBITS))
+    return bytes(out)
+
+
 async def send_image(
     client: BleakClient, data: bytes, *, compressed: bool = False
-) -> None:
+) -> int:
     """Store and refresh a single full-screen image (sections 3.1 - 3.3).
 
     ``data`` must already be packed in the panel's native pixel format. The
     document does not specify that format; for BWRY panels ``imaging.py``
     has been verified against hardware, for 1 bit panels it has not.
+
+    With ``compressed`` the payload goes through :func:`compress_image`
+    first. Returns the number of bytes actually put on the wire.
     """
-    await _store_blocks(client, CMD_IMAGE_STORE, data)
+    payload = compress_image(data) if compressed else data
+    await send_prepared_image(client, payload, compressed=compressed)
+    return len(payload)
+
+
+async def send_prepared_image(
+    client: BleakClient, payload: bytes, *, compressed: bool
+) -> None:
+    """Transmit bytes that are already in their final form.
+
+    Split out from :func:`send_image` because deciding whether compression
+    is worth it means compressing and looking at the result; a caller that
+    has done so already should not have to do it twice. ``compressed`` only
+    selects the refresh opcode here.
+    """
+    await _store_blocks(client, CMD_IMAGE_STORE, payload)
     await asyncio.sleep(PRE_REFRESH_DELAY_S)
     command = CMD_IMAGE_REFRESH_COMP if compressed else CMD_IMAGE_REFRESH_RAW
-    await send_command(client, command + struct.pack("<I", len(data)))
+    # The size is the length of what was stored, compressed or not.
+    await send_command(client, command + struct.pack("<I", len(payload)))
 
 
 def parse_advertisement(payload: bytes) -> tuple[VersionInfo, int] | None:

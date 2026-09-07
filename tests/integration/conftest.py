@@ -102,3 +102,21 @@ def attach_services(client, present: bool = True) -> FakeServices:
 
     client.clear_cache = clear_cache
     return services
+
+
+def raw_payload(sent: bytes) -> bytes:
+    """Return the image bytes behind whatever went on the wire.
+
+    Images are compressed by default, so a test that cares about the pixel
+    data has to look through that. Decompressing here rather than turning
+    compression off keeps the tests on the path the integration actually
+    takes.
+    """
+    from custom_components.esl_zhsunyco.protocol import (
+        COMPRESSION_HEADER,
+        decompress_image,
+    )
+
+    if sent.startswith(COMPRESSION_HEADER):
+        return decompress_image(sent)
+    return sent

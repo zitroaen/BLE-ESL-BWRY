@@ -13,6 +13,8 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.esl_zhsunyco.const import DOMAIN, SERVICE_SET_IMAGE
 
+from .conftest import raw_payload
+
 URL = "https://example.com/calendar.png"
 
 
@@ -45,7 +47,7 @@ async def _call(hass, data, uploaded: list[bytes]):
 
     with (
         patch(
-            "custom_components.esl_zhsunyco.device.protocol.send_image",
+            "custom_components.esl_zhsunyco.device.protocol.send_prepared_image",
             new=fake_send_image,
         ),
         patch(
@@ -75,7 +77,7 @@ async def test_an_image_is_downloaded_and_sent(
     )
 
     # Scaled to the panel and packed, exactly as a local file would be.
-    assert len(uploaded[0]) == 184 * 384 // 4
+    assert len(raw_payload(uploaded[0])) == 184 * 384 // 4
     assert response["results"][0]["ok"] is True
     # The URL names the image, since downloaded bytes have no path.
     assert device.state.last_image_source == URL

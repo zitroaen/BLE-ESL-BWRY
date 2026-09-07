@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, patch
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .conftest import raw_payload
+
 ENTITY = "image.esl_66_66_54_20_00_55_panel"
 
 
@@ -29,7 +31,7 @@ async def _press_test_pattern(hass: HomeAssistant) -> list[bytes]:
 
     with (
         patch(
-            "custom_components.esl_zhsunyco.device.protocol.send_image",
+            "custom_components.esl_zhsunyco.device.protocol.send_prepared_image",
             new=fake_send_image,
         ),
         patch(
@@ -95,9 +97,8 @@ async def test_the_preview_matches_the_bytes_that_were_sent(
     preview = Image.open(BytesIO(device.state.last_image_png)).convert("RGB")
     assert preview.size == (device.width, device.height)
 
-    codes = [
-        (byte >> shift) & 0b11 for byte in uploaded[0] for shift in (6, 4, 2, 0)
-    ]
+    sent = raw_payload(uploaded[0])
+    codes = [(byte >> shift) & 0b11 for byte in sent for shift in (6, 4, 2, 0)]
     assert list(preview.getdata()) == [BWRY_PALETTE[code] for code in codes]
 
 
@@ -120,7 +121,7 @@ async def test_a_failed_upload_leaves_the_old_preview(
 
     with (
         patch(
-            "custom_components.esl_zhsunyco.device.protocol.send_image",
+            "custom_components.esl_zhsunyco.device.protocol.send_prepared_image",
             new=failing_send_image,
         ),
         patch(
@@ -135,11 +136,11 @@ async def test_a_failed_upload_leaves_the_old_preview(
         contextlib.suppress(Exception),
     ):
         await hass.services.async_call(
-                "button",
-                "press",
-                {"entity_id": "button.esl_66_66_54_20_00_55_test_pattern"},
-                blocking=True,
-            )
+            "button",
+            "press",
+            {"entity_id": "button.esl_66_66_54_20_00_55_test_pattern"},
+            blocking=True,
+        )
 
     assert device.state.last_image_png == first
     assert device.state.last_image_at == first_at
@@ -233,7 +234,7 @@ async def test_a_failed_send_does_not_reach_the_store(
 
     with (
         patch(
-            "custom_components.esl_zhsunyco.device.protocol.send_image",
+            "custom_components.esl_zhsunyco.device.protocol.send_prepared_image",
             new=failing_send_image,
         ),
         patch(

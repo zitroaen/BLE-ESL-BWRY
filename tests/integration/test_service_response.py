@@ -139,7 +139,7 @@ async def test_an_image_send_reports_its_size(
     label = FakeLabel(reacts=True)
 
     with patch(
-        "custom_components.esl_zhsunyco.device.protocol.send_image",
+        "custom_components.esl_zhsunyco.device.protocol.send_prepared_image",
         new=AsyncMock(),
     ):
         response = await _call(

@@ -177,7 +177,12 @@ def _outcome(device: ESLDevice, record: dict) -> dict:
         "error_code": (status.get("final") or {}).get("error_code"),
         "detail": record.get("detail") or record.get("interpretation"),
         "at": record.get("at"),
-        **{k: record[k] for k in ("bytes", "encoding") if k in record},
+        # Image sends add these; nothing else in the record carries them.
+        **{
+            key: record[key]
+            for key in ("bytes", "sent_bytes", "compressed", "encoding")
+            if key in record
+        },
     }
 
 

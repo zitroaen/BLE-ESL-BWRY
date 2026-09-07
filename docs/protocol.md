@@ -263,7 +263,7 @@ image pointer, the image size and the RGB timing fields.
 |---|---|---|---|---|
 | `0xA500` | `00 a5` | 3.1 | pointer 4B + data | **[M]** |
 | `0xA501` | `01 a5` | 3.2 | picture size 4B | **[M]** |
-| `0xA502` | `02 a5` | 3.3 | picture size 4B | **[D?]** |
+| `0xA502` | `02 a5` | 3.3 | compressed size 4B | **[M]** |
 | `0xA503` | `03 a5` | 3.9 | pointer 4B + data | **[D?]** |
 | `0xA504` | `04 a5` | 3.7 | none | **[M]** |
 | `0xA505` | `05 a5` | 3.5 | pointer 4B + data | **[D?]** |
@@ -429,11 +429,54 @@ document gives none. They are sufficient, not proven minimal. **[A]**
 drops the connection during the physical refresh. That is normal and not an
 error. **[M]**
 
-### 7.5 Compressed upload, `0xA502` (sec. 3.3) **[D?]**
+### 7.5 Compressed upload, `0xA502` (sec. 3.3) **[M]**
 
-The document names a block compression scheme but does not describe it, so
-it cannot be implemented from the document alone. Uncompressed upload
-through `0xA501` is unaffected.
+The document names "Block Compressed Picture" and describes nothing else.
+The scheme is **raw DEFLATE over fixed size blocks**:
+
+```
+A5 A6 <block count 1B> 02
+per block:  <index 1B, 1-based>  <compressed size 2B LE>  <deflate data>
+```
+
+- Each block holds up to **8192 bytes of UNCOMPRESSED** image data - the
+  same 2 bpp packed bytes as an uncompressed upload (§7.2)
+- **Raw** DEFLATE means no zlib header and no Adler-32 trailer. In Python
+  that is `zlib.compressobj(level, zlib.DEFLATED, wbits=-15)`
+- Byte 3 is a fixed format marker, not a count
+- Block indices are 1-based and in order
+- A 17664 byte full screen is three blocks: 8192 + 8192 + 1280
+
+The compressed payload, header included, is transmitted exactly like an
+uncompressed one: `0xA500` + 4 byte LE pointer + chunk, then `0xA502` +
+4 byte LE **size of the compressed payload**.
+
+Two hardware runs on a BLE-35BWRY, different content each time, sent over
+the previous image without clearing:
+
+| Raw | Compressed | Result |
+|---|---|---|
+| 17664 B | 834 B (4.7 %) | correct image on the panel |
+| 17664 B | 1093 B (6.2 %) | correct image on the panel |
+
+Deflate can expand incompressible input, so an encoder should fall back to
+an uncompressed upload when the compressed form comes out larger.
+
+The format was established by interoperability with
+[shorti1996/zhsunyco-esl-wolink](https://github.com/shorti1996/zhsunyco-esl-wolink),
+which uses compression by default. That project is GPLv3; this one is MIT,
+so no code was taken from it. A wire layout needed to talk to someone
+else's device is an interoperability fact, which is the basis this whole
+document rests on.
+
+### 7.6 Refresh completion notification **[M]**
+
+The status characteristic pushes a notification when an e-ink refresh
+finishes: `ff 00 00 00 00 00 00 00`, once, directly after the refresh
+completes. It is independent of the polled status byte and arrived in both
+runs above.
+
+The document mentions no notifications at all.
 
 ---
 
@@ -465,7 +508,6 @@ success.
 
 | Area | State |
 |---|---|
-| Block compression, `0xA502` | Scheme not described anywhere |
 | Multi-screen, `0xA503` / `0xA509` | Implementable from the document, never exercised |
 | OTA, `0xA505`–`0xA507` | Documented, deliberately not implemented |
 | Version field rendering | `03 30` could be `3.48`, `48.3` or `3.30` |
@@ -473,6 +515,6 @@ success.
 | Panel resolutions | On the vendor sheet, but never reported by the label |
 | Row axis per model | Known for three of ten; not derivable from the resolution |
 | PID to model mapping | One PID known; not enough to map models |
-| Notify on the readable characteristics | Present, purpose unknown, unused |
+| Notify beyond the refresh signal | Other notifications, if any, unknown |
 | Battery cell type and discharge curve | Not reported; voltage is all there is |
 | Minimum viable upload timing | Working values known, lower bound not probed |

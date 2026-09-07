@@ -14,6 +14,8 @@ from custom_components.esl_zhsunyco.const import (
     MODELS,
 )
 
+from .conftest import raw_payload
+
 
 async def _setup(hass: HomeAssistant, entry):
     entry.add_to_hass(hass)
@@ -23,9 +25,7 @@ async def _setup(hass: HomeAssistant, entry):
 
 
 async def _set_options(hass: HomeAssistant, entry, **options):
-    hass.config_entries.async_update_entry(
-        entry, options={**entry.options, **options}
-    )
+    hass.config_entries.async_update_entry(entry, options={**entry.options, **options})
     await hass.async_block_till_done()
 
 
@@ -136,7 +136,7 @@ async def test_the_size_reaches_the_rendered_image(
 
     with (
         patch(
-            "custom_components.esl_zhsunyco.device.protocol.send_image",
+            "custom_components.esl_zhsunyco.device.protocol.send_prepared_image",
             new=fake_send_image,
         ),
         patch(
@@ -155,7 +155,7 @@ async def test_the_size_reaches_the_rendered_image(
             blocking=True,
         )
 
-    assert len(uploaded[0]) == 128 * 296 // 4
+    assert len(raw_payload(uploaded[0])) == 128 * 296 // 4
 
 
 async def test_the_model_can_be_corrected_after_setup(

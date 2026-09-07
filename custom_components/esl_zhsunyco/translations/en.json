@@ -42,7 +42,8 @@
           "model": "Panel model",
           "width": "Panel width",
           "height": "Panel height",
-          "pixel_format": "Colour depth"
+          "pixel_format": "Colour depth",
+          "compress": "Compress images"
         },
         "data_description": {
           "linger_s": "How long to hold the Bluetooth connection after a command. Reconnecting means waiting for the label to advertise again, which takes minutes, so a short linger makes follow-up commands instant. 0 disconnects immediately.",
@@ -51,7 +52,8 @@
           "model": "Sets the default size. Pick the closest one and correct the size below if it does not match.",
           "width": "0 takes the width from the model. Set it directly for a panel that is not listed.",
           "height": "0 takes the height from the model.",
-          "pixel_format": "bwry is four colours at 2 bits per pixel, mono is black and white at 1 bit."
+          "pixel_format": "bwry is four colours at 2 bits per pixel, mono is black and white at 1 bit.",
+          "compress": "Sends a full screen as a few hundred bytes instead of the full size, which keeps the connection open for much less time. Turn it off if a panel refuses compressed uploads."
         }
       }
     },
