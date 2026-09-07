@@ -36,12 +36,19 @@
         "title": "ESL options",
         "data": {
           "scan_interval_min": "Poll interval (0 disables polling)",
-          "linger_s": "Keep connection open (seconds)"
+          "linger_s": "Keep connection open (seconds)",
+          "battery_full_mv": "Battery voltage when full",
+          "battery_empty_mv": "Battery voltage when empty"
         },
         "data_description": {
-          "linger_s": "How long to hold the Bluetooth connection after a command. Reconnecting means waiting for the label to advertise again, which takes minutes, so a short linger makes follow-up commands instant. 0 disconnects immediately."
+          "linger_s": "How long to hold the Bluetooth connection after a command. Reconnecting means waiting for the label to advertise again, which takes minutes, so a short linger makes follow-up commands instant. 0 disconnects immediately.",
+          "battery_full_mv": "Voltage of a fresh cell. 3000 mV suits the 3 V lithium coin cell these labels ship with.",
+          "battery_empty_mv": "Voltage at which the label stops working. The percentage is interpolated between the two and is an estimate, not a reading."
         }
       }
+    },
+    "error": {
+      "battery_range": "The full voltage has to be above the empty voltage."
     }
   },
   "entity": {
@@ -70,6 +77,9 @@
       },
       "product_id": {
         "name": "Product ID"
+      },
+      "battery_level": {
+        "name": "Battery"
       }
     },
     "button": {

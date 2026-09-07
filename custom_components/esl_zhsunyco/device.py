@@ -24,9 +24,13 @@ from homeassistant.util import dt as dt_util
 from . import protocol
 from .const import (
     CONF_ADDRESS,
+    CONF_BATTERY_EMPTY_MV,
+    CONF_BATTERY_FULL_MV,
     CONF_LINGER_S,
     CONF_MODEL,
     CONF_SCAN_INTERVAL_MIN,
+    DEFAULT_BATTERY_EMPTY_MV,
+    DEFAULT_BATTERY_FULL_MV,
     DEFAULT_LINGER_S,
     DEFAULT_MODEL,
     DEFAULT_PIXEL_FORMAT,
@@ -187,6 +191,34 @@ class ESLDevice:
     def linger_seconds(self) -> int:
         """How long to hold the connection open after a command."""
         return int(self.entry.options.get(CONF_LINGER_S, DEFAULT_LINGER_S))
+
+    @property
+    def battery_percent(self) -> int | None:
+        """Estimate the remaining charge, in percent.
+
+        The label reports a voltage and nothing else, so this is derived,
+        not read. It interpolates linearly between the configured empty and
+        full voltages and clamps to 0-100.
+
+        Linear on voltage is the honest choice here rather than a discharge
+        curve: the real curve depends on the cell fitted, which we do not
+        know, and inventing one would dress a guess up as precision. A
+        lithium coin cell holds a nearly flat voltage for most of its life,
+        so the reading will sit high for a long time and then fall quickly.
+        """
+        millivolts = self.state.battery_mv
+        if millivolts is None:
+            return None
+
+        options = self.entry.options
+        full = int(options.get(CONF_BATTERY_FULL_MV, DEFAULT_BATTERY_FULL_MV))
+        empty = int(options.get(CONF_BATTERY_EMPTY_MV, DEFAULT_BATTERY_EMPTY_MV))
+        if full <= empty:
+            # Misconfigured. No number is better than a wrong one.
+            return None
+
+        fraction = (millivolts - empty) / (full - empty)
+        return round(max(0.0, min(1.0, fraction)) * 100)
 
     @property
     def connected(self) -> bool:

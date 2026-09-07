@@ -34,6 +34,7 @@ command is always the slow one — see
 | See what the panel shows | an `image` entity, kept across restarts |
 | Drive the RGB LED | colour, blink rate, duration |
 | Read battery and status | without connecting, from the advertisement |
+| Watch the charge level | in percent, for a low-battery automation |
 
 Not supported: firmware updates over the air, and storing several images in
 the label to switch between. Compressed upload is not used because the
@@ -73,6 +74,9 @@ Two options are worth knowing about:
 version. Battery and version numbers arrive passively without a connection,
 so a long interval is fine. `0` disables the poll entirely.
 
+**Battery voltage when full / when empty** set the range the percentage is
+interpolated between — see [Battery level](#battery-level) below.
+
 **Linger** is how long the connection stays open after a command, 15 seconds
 by default. Commands inside that window are instant. Longer is not better: a
 connected label stops advertising, so while the link is held nothing can see
@@ -82,13 +86,43 @@ the label — not even Home Assistant.
 
 | Entity | Type | Note |
 |---|---|---|
-| Battery voltage | Sensor | no connection needed |
+| Battery | Sensor | charge in percent, estimated from the voltage |
+| Battery voltage | Sensor | the actual reading, no connection needed |
 | Status | Sensor | busy, or a readable error code |
 | Panel | Image | what was last put on the screen |
 | RGB LED | Light | colour and blink pattern |
 | RGB on/off time, RGB duration | Number | blink parameters |
 | Clear screen, test pattern, diagnostic probe | Button | one press each |
 | Signal strength, display version, product ID | Sensor | diagnostic, off by default |
+
+## Battery level
+
+The label reports a **voltage**, not a percentage — the protocol has no
+percentage in it anywhere. The `Battery` sensor derives one by interpolating
+linearly between two configurable voltages, so it carries Home Assistant's
+battery device class and works in a low-battery automation:
+
+```yaml
+triggers:
+  - trigger: numeric_state
+    entity_id: sensor.esl_66_66_17_40_27_77_battery
+    below: 20
+```
+
+The defaults are **3000 mV full** and **2200 mV empty**, which suit the 3 V
+lithium coin cell these labels ship with. A measured unit read 2947 mV,
+which comes out as 93 %.
+
+Two things worth knowing before you trust the number:
+
+- **It is an estimate, not a measurement.** If you know your cell, set the
+  two voltages in the integration options. The `Battery voltage` sensor
+  keeps showing what the label actually reports.
+- **The reading will sit high for a long time and then fall quickly.** That
+  is how lithium coin cells behave — nearly flat voltage for most of their
+  life, then a cliff. A straight line between two voltages cannot represent
+  that, and a curve invented without knowing the cell would just be a guess
+  with more decimal places. Treat a falling reading as urgent.
 
 ## Sending a picture
 

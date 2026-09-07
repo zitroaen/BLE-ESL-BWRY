@@ -12,6 +12,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    PERCENTAGE,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     EntityCategory,
     UnitOfElectricPotential,
@@ -33,6 +34,14 @@ class ESLSensorDescription(SensorEntityDescription):
 
 
 SENSORS: tuple[ESLSensorDescription, ...] = (
+    ESLSensorDescription(
+        key="battery_level",
+        translation_key="battery_level",
+        device_class=SensorDeviceClass.BATTERY,
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda device: device.battery_percent,
+    ),
     ESLSensorDescription(
         key="battery_voltage",
         translation_key="battery_voltage",

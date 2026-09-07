@@ -208,6 +208,11 @@ How to render a version word is not specified. `03 30` can be read as
 2 bytes, **little endian**, millivolts. Note the contrast with the
 advertisement, where the same value is big endian (§2.1).
 
+**There is no charge percentage anywhere in the protocol**, and no cell
+chemistry or capacity is reported either. A percentage can only be derived
+from the voltage, which requires knowing the cell. Measured units read
+2947–2969 mV, consistent with a 3 V lithium coin cell. **[M]**
+
 ### 5.3 Status (sec. VI) **[M]**
 
 The measured unit returns **32 bytes** where the document describes 2. The
@@ -425,4 +430,5 @@ success.
 | 1 bit pixel packing | Assumed, no mono panel measured |
 | Panel resolutions other than 184 × 384 | Not in the document at all |
 | Notify on the readable characteristics | Present, purpose unknown, unused |
+| Battery cell type and discharge curve | Not reported; voltage is all there is |
 | Minimum viable upload timing | Working values known, lower bound not probed |

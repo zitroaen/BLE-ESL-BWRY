@@ -11,10 +11,16 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
+    BATTERY_MV_MAX,
+    BATTERY_MV_MIN,
     CONF_ADDRESS,
+    CONF_BATTERY_EMPTY_MV,
+    CONF_BATTERY_FULL_MV,
     CONF_LINGER_S,
     CONF_MODEL,
     CONF_SCAN_INTERVAL_MIN,
+    DEFAULT_BATTERY_EMPTY_MV,
+    DEFAULT_BATTERY_FULL_MV,
     DEFAULT_LINGER_S,
     DEFAULT_MODEL,
     DEFAULT_SCAN_INTERVAL_MIN,
@@ -38,6 +44,16 @@ LINGER_SELECTOR = selector.NumberSelector(
         max=600,
         step=5,
         unit_of_measurement="s",
+        mode=selector.NumberSelectorMode.BOX,
+    )
+)
+
+BATTERY_MV_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=BATTERY_MV_MIN,
+        max=BATTERY_MV_MAX,
+        step=10,
+        unit_of_measurement="mV",
         mode=selector.NumberSelectorMode.BOX,
     )
 )
@@ -160,17 +176,27 @@ class ESLOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Show and store the options."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(
-                data={
-                    CONF_SCAN_INTERVAL_MIN: int(user_input[CONF_SCAN_INTERVAL_MIN]),
-                    CONF_LINGER_S: int(user_input[CONF_LINGER_S]),
-                }
-            )
+            full = int(user_input[CONF_BATTERY_FULL_MV])
+            empty = int(user_input[CONF_BATTERY_EMPTY_MV])
+            if full <= empty:
+                # Otherwise the percentage would be undefined or inverted.
+                errors["base"] = "battery_range"
+            else:
+                return self.async_create_entry(
+                    data={
+                        CONF_SCAN_INTERVAL_MIN: int(user_input[CONF_SCAN_INTERVAL_MIN]),
+                        CONF_LINGER_S: int(user_input[CONF_LINGER_S]),
+                        CONF_BATTERY_FULL_MV: full,
+                        CONF_BATTERY_EMPTY_MV: empty,
+                    }
+                )
 
-        options = self.config_entry.options
+        options = user_input or self.config_entry.options
         return self.async_show_form(
             step_id="init",
+            errors=errors,
             data_schema=vol.Schema(
                 {
                     vol.Required(
@@ -183,6 +209,18 @@ class ESLOptionsFlow(OptionsFlow):
                         CONF_LINGER_S,
                         default=options.get(CONF_LINGER_S, DEFAULT_LINGER_S),
                     ): LINGER_SELECTOR,
+                    vol.Required(
+                        CONF_BATTERY_FULL_MV,
+                        default=options.get(
+                            CONF_BATTERY_FULL_MV, DEFAULT_BATTERY_FULL_MV
+                        ),
+                    ): BATTERY_MV_SELECTOR,
+                    vol.Required(
+                        CONF_BATTERY_EMPTY_MV,
+                        default=options.get(
+                            CONF_BATTERY_EMPTY_MV, DEFAULT_BATTERY_EMPTY_MV
+                        ),
+                    ): BATTERY_MV_SELECTOR,
                 }
             ),
         )

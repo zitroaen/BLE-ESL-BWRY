@@ -128,3 +128,41 @@ async def test_options_zero_disables_polling(
 
     device = config_entry.runtime_data
     assert device.coordinator.update_interval is None
+
+
+async def test_options_reject_an_impossible_battery_range(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """Full below empty would make the percentage meaningless.
+
+    Better to refuse it in the form than to store it and let the sensor go
+    blank with no explanation.
+    """
+    from custom_components.esl_zhsunyco.const import (
+        CONF_BATTERY_EMPTY_MV,
+        CONF_BATTERY_FULL_MV,
+    )
+
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_BATTERY_FULL_MV: 2200, CONF_BATTERY_EMPTY_MV: 3000},
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "battery_range"}
+
+    # And a sane range goes through.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_BATTERY_FULL_MV: 3100, CONF_BATTERY_EMPTY_MV: 2300},
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert config_entry.options[CONF_BATTERY_FULL_MV] == 3100
+    assert config_entry.options[CONF_BATTERY_EMPTY_MV] == 2300

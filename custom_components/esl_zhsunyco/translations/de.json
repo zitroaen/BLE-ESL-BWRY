@@ -36,12 +36,19 @@
         "title": "ESL-Optionen",
         "data": {
           "scan_interval_min": "Abfrageintervall (0 deaktiviert die Abfrage)",
-          "linger_s": "Verbindung offen halten (Sekunden)"
+          "linger_s": "Verbindung offen halten (Sekunden)",
+          "battery_full_mv": "Batteriespannung bei voll",
+          "battery_empty_mv": "Batteriespannung bei leer"
         },
         "data_description": {
-          "linger_s": "Wie lange die Bluetooth-Verbindung nach einem Kommando gehalten wird. Ein neuer Verbindungsaufbau bedeutet erneutes Warten auf ein Advertisement, was Minuten dauert — ein kurzes Offenhalten macht Folgekommandos daher sofort wirksam. 0 trennt sofort."
+          "linger_s": "Wie lange die Bluetooth-Verbindung nach einem Kommando gehalten wird. Ein neuer Verbindungsaufbau bedeutet erneutes Warten auf ein Advertisement, was Minuten dauert — ein kurzes Offenhalten macht Folgekommandos daher sofort wirksam. 0 trennt sofort.",
+          "battery_full_mv": "Spannung einer frischen Zelle. 3000 mV passen zur 3-V-Lithium-Knopfzelle, die in diesen Labels steckt.",
+          "battery_empty_mv": "Spannung, bei der das Label aufhört zu arbeiten. Der Prozentwert wird dazwischen interpoliert und ist eine Schätzung, kein Messwert."
         }
       }
+    },
+    "error": {
+      "battery_range": "Die Spannung bei voll muss über der bei leer liegen."
     }
   },
   "entity": {
@@ -70,6 +77,9 @@
       },
       "product_id": {
         "name": "Produkt-ID"
+      },
+      "battery_level": {
+        "name": "Batterie"
       }
     },
     "button": {

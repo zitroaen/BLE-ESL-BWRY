@@ -23,6 +23,25 @@ CONF_LINGER_S: Final = "linger_s"
 # See docs/hardware-verified-findings.md sections 6 and 7.1.
 DEFAULT_LINGER_S: Final = 15
 
+# The label reports millivolts and nothing else - the protocol has no
+# percentage anywhere - so a charge level has to be derived from a voltage
+# range. Both ends are options because they depend on the cell fitted.
+#
+# The defaults suit the 3 V lithium coin cell these labels ship with: a
+# fresh one settles near 3.0 V under light load, and the BLE hardware stops
+# working somewhere around 2.2 V. Measured units read 2947-2969 mV, which
+# puts them near the top of that range.
+#
+# Any percentage from this is an estimate, not a measurement. Lithium coin
+# cells hold a nearly flat voltage for most of their life and then fall off
+# quickly, so expect the reading to sit high for a long time and then drop.
+CONF_BATTERY_FULL_MV: Final = "battery_full_mv"
+CONF_BATTERY_EMPTY_MV: Final = "battery_empty_mv"
+DEFAULT_BATTERY_FULL_MV: Final = 3000
+DEFAULT_BATTERY_EMPTY_MV: Final = 2200
+BATTERY_MV_MIN: Final = 500
+BATTERY_MV_MAX: Final = 6000
+
 # Keys used by the pre-HACS prototype, kept only for entry migration.
 LEGACY_CONF_MAC: Final = "mac_address"
 LEGACY_CONF_BATTERY_INTERVAL: Final = "battery_scan_interval"

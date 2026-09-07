@@ -43,7 +43,7 @@ async def test_setup_survives_unreachable_label(
 async def test_entities_are_created(
     hass: HomeAssistant, config_entry, mock_bluetooth
 ) -> None:
-    """All four platforms must register their entities."""
+    """Every platform must register its entities."""
     await _setup(hass, config_entry)
 
     registry = er.async_get(hass)
@@ -52,10 +52,11 @@ async def test_entities_are_created(
     for entity in entities:
         by_domain[entity.domain] = by_domain.get(entity.domain, 0) + 1
 
-    assert by_domain.get("sensor") == 5
+    assert by_domain.get("sensor") == 6
     assert by_domain.get("button") == 3
     assert by_domain.get("light") == 1
     assert by_domain.get("number") == 3
+    assert by_domain.get("image") == 1
 
 
 async def test_single_device_entry(
