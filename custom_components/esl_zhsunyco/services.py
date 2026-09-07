@@ -138,6 +138,7 @@ SEND_TEST_PATTERN_SCHEMA = _DEVICE_SELECTOR.extend(
 # into memory before Pillow ever sees it.
 MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024
 DOWNLOAD_TIMEOUT_S = 30
+_READ_CHUNK = 64 * 1024
 
 
 async def _fetch_image(hass: HomeAssistant, url: str) -> bytes:
@@ -160,9 +161,19 @@ async def _fetch_image(hass: HomeAssistant, url: str) -> bytes:
         async with response:
             if response.status != 200:
                 raise ServiceValidationError(f"{url} returned HTTP {response.status}")
-            # Trust the body, not the header: Content-Length is optional and
-            # can lie, so cap while reading.
-            data = await response.content.read(MAX_DOWNLOAD_BYTES + 1)
+            # Read to the end, in pieces, capping as we go. Not read(n):
+            # that returns whatever happens to be buffered, so a body that
+            # arrives in several TCP segments - anything of size, over a
+            # real network - comes back truncated with no error at all,
+            # and a half a PNG then fails much later as a broken image.
+            buffer = bytearray()
+            async for chunk in response.content.iter_chunked(_READ_CHUNK):
+                buffer.extend(chunk)
+                if len(buffer) > MAX_DOWNLOAD_BYTES:
+                    raise ServiceValidationError(
+                        f"{url} is larger than the {MAX_DOWNLOAD_BYTES} byte limit"
+                    )
+            data = bytes(buffer)
     except TimeoutError as err:
         raise ServiceValidationError(
             f"{url} did not respond within {DOWNLOAD_TIMEOUT_S}s"
@@ -170,10 +181,6 @@ async def _fetch_image(hass: HomeAssistant, url: str) -> bytes:
     except aiohttp.ClientError as err:
         raise ServiceValidationError(f"Could not fetch {url}: {err}") from err
 
-    if len(data) > MAX_DOWNLOAD_BYTES:
-        raise ServiceValidationError(
-            f"{url} is larger than the {MAX_DOWNLOAD_BYTES} byte limit"
-        )
     if not data:
         raise ServiceValidationError(f"{url} returned an empty body")
     return data

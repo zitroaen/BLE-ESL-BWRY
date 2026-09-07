@@ -890,9 +890,24 @@ class ESLDevice:
 
         # The panel decides the default; an explicit encoding wins.
         request.pixel_format = self.pixel_format
-        rendered = await self.hass.async_add_executor_job(
-            render_image, request, self.width, self.height
-        )
+        try:
+            rendered = await self.hass.async_add_executor_job(
+                render_image, request, self.width, self.height
+            )
+        except HomeAssistantError:
+            raise
+        except Exception as err:
+            # Rendering happens before any command runs, so nothing below
+            # wraps it. Home Assistant shows an unrecognised exception as
+            # "Unknown error" whatever its message, and the usual cause is
+            # a source that is not a usable image at all.
+            source = request.source_name or request.path or request.pattern
+            raise HomeAssistantError(
+                f"{self.address}: could not read the image from "
+                f"{source or 'the given data'} - {type(err).__name__}: "
+                f"{str(err).strip() or 'no detail'}"
+            ) from err
+
         raw = rendered.payload
         payload, compressed = self._compressed_or_raw(raw)
         record = await self._run_command(

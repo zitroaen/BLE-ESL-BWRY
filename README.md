@@ -218,7 +218,8 @@ data:
 ```
 
 Only `http` and `https` are accepted, the download times out after 30
-seconds, and anything over 8 MB is refused.
+seconds, and anything over 8 MB is refused. A source that turns out not to
+be a usable image says so, naming the URL.
 
 You do not have to prepare the picture. It is fitted to the panel, dithered
 onto the four colours the hardware can display, packed and compressed for
