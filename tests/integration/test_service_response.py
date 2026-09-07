@@ -286,7 +286,7 @@ async def test_a_failed_connect_reports_what_the_stack_sees(
     """
     from bleak_retry_connector import BleakNotFoundError
 
-    device = await _setup(hass, config_entry)
+    await _setup(hass, config_entry)
 
     async def fake_wait(_self, wait=300):
         return object()
