@@ -88,18 +88,37 @@ _ENCODING_FIELDS = {
 }
 
 
+def _drop_blank_sources(data: dict) -> dict:
+    """Treat an empty path or url as not given at all.
+
+    The Home Assistant UI submits every field it renders, blank ones
+    included, so filling in one of the two arrives as the other being
+    present and empty. Removing them here, before the field validators
+    run, is what lets an empty url stay out of the way of cv.url.
+    """
+    if not isinstance(data, dict):
+        return data
+    cleaned = dict(data)
+    for key in ("path", "url"):
+        value = cleaned.get(key)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            cleaned.pop(key, None)
+    return cleaned
+
+
 def _exactly_one_source(data: dict) -> dict:
     """Require a path or a URL, and refuse both at once."""
-    if bool(data.get("path")) == bool(data.get("url")):
+    if ("path" in data) == ("url" in data):
         raise vol.Invalid("give either path or url, not both and not neither")
     return data
 
 
 SET_IMAGE_SCHEMA = vol.All(
+    _drop_blank_sources,
     _DEVICE_SELECTOR.extend(
         {
-            vol.Exclusive("path", "source"): cv.string,
-            vol.Exclusive("url", "source"): vol.All(cv.string, cv.url),
+            vol.Optional("path"): cv.string,
+            vol.Optional("url"): vol.All(cv.string, cv.url),
             **_ENCODING_FIELDS,
         }
     ),

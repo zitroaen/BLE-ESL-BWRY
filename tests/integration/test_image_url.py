@@ -155,3 +155,52 @@ async def test_the_source_must_be_exactly_one_usable_thing(
         )
 
     assert uploaded == []
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [{}, {"url": ""}, {"url": "   "}, {"url": None}],
+    ids=["path only", "empty url", "blank url", "null url"],
+)
+async def test_the_ui_sends_the_field_it_did_not_fill_in(
+    hass: HomeAssistant, config_entry, mock_bluetooth, tmp_path, extra
+) -> None:
+    """A blank second source must mean "not given", not "given as empty".
+
+    Home Assistant's UI submits every field it renders. Filling in the path
+    therefore arrives with url present and empty, which an exclusion group
+    rejects outright and cv.url rejects as a malformed URL - both surfacing
+    as "Unknown error" with nothing to act on.
+    """
+    from PIL import Image
+
+    await _setup(hass, config_entry)
+    path = tmp_path / "picture.png"
+    Image.new("RGB", (50, 60), (255, 0, 0)).save(path)
+    uploaded: list[bytes] = []
+
+    with patch.object(hass.config, "is_allowed_path", return_value=True):
+        await _call(
+            hass,
+            {"device_id": _device_id(hass, config_entry), "path": str(path), **extra},
+            uploaded,
+        )
+
+    assert len(uploaded) == 1
+
+
+async def test_a_blank_url_and_no_path_is_a_clear_error(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """Submitting the form with neither filled in has to say so."""
+    await _setup(hass, config_entry)
+    uploaded: list[bytes] = []
+
+    with pytest.raises(Exception, match="either path or url"):
+        await _call(
+            hass,
+            {"device_id": _device_id(hass, config_entry), "path": "", "url": ""},
+            uploaded,
+        )
+
+    assert uploaded == []
