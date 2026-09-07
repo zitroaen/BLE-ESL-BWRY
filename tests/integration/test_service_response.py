@@ -272,3 +272,45 @@ async def test_the_record_keeps_the_step_and_the_duration(
     assert record["result"] == "failed"
     assert record["phase"] == "writing the command"
     assert isinstance(record["elapsed_s"], float)
+
+
+async def test_a_failed_connect_reports_what_the_stack_sees(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """"Cannot connect" is the one failure that needs the surroundings.
+
+    Advertisements carry further than a usable connection does, so a label
+    that is plainly visible and still will not connect looks like a
+    contradiction. The numbers that resolve it are how many scanners could
+    connect at all and which one heard it last.
+    """
+    from bleak_retry_connector import BleakNotFoundError
+
+    device = await _setup(hass, config_entry)
+
+    async def fake_wait(_self, wait=300):
+        return object()
+
+    with (
+        patch(
+            "custom_components.esl_zhsunyco.device.ESLDevice."
+            "_async_wait_for_connectable",
+            new=fake_wait,
+        ),
+        patch(
+            "custom_components.esl_zhsunyco.device.establish_connection",
+            side_effect=BleakNotFoundError("Failed to connect after 7 attempt(s)"),
+        ),
+        pytest.raises(HomeAssistantError) as caught,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_CLEAR_SCREEN,
+            {"device_id": _device_id(hass, config_entry)},
+            blocking=True,
+        )
+
+    message = str(caught.value)
+    assert "while connecting" in message
+    assert "connectable scanner" in message, "how many could connect"
+    assert "power cycle" in message, "and what to try"

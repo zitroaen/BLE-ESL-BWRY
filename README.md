@@ -499,6 +499,34 @@ connection slots. Another
 [ESPHome Bluetooth proxy](https://esphome.github.io/bluetooth-proxies/)
 near the label is the fix.
 
+### It advertises, but nothing can connect to it
+
+The device page shows a recent advertisement and every command still fails
+with something like:
+
+```
+send_image (1042 bytes) failed while connecting after 252s -
+BleakNotFoundError: Failed to connect after 7 attempt(s): Timeout waiting
+for connect response
+```
+
+That is not a contradiction. **Advertisements carry considerably further
+than a connection does** — a label can be perfectly audible and still be
+unable to hold a link. Three causes, in the order worth trying:
+
+1. **The proxy has no free connection slot.** An ESPHome proxy handles
+   three connections at once by default. Restart the proxy; if it is busy
+   with other devices, put a second one near the label.
+2. **The label is stuck.** E-ink firmware can hang, particularly after an
+   upload that was cut short. Take the battery out for a few seconds. This
+   costs nothing and fixes it more often than it should.
+3. **It is too far for a reliable link.** Look at the RSSI the error
+   message quotes. Below roughly −80 dBm, advertisements still arrive and
+   connections mostly do not.
+
+The error message names how many connectable scanners exist and which one
+heard the label last, which separates the first case from the third.
+
 ### Two ESL integrations at once
 
 A label accepts only **one** connection at a time. If a second integration

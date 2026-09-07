@@ -665,6 +665,33 @@ class ESLDevice:
     # Commands
     # ------------------------------------------------------------------
 
+    def _connection_hint(self) -> str:
+        """Summarise what the Bluetooth stack sees, for a failed connect.
+
+        A label that advertises but will not accept a connection is the one
+        failure where "it cannot connect" says nothing useful. Advertisements
+        carry further than a reliable connection does, so the interesting
+        numbers are how many scanners can actually connect, which one heard
+        it last and how strongly.
+        """
+        try:
+            report = self.bluetooth_report()
+        except Exception:  # noqa: BLE001 - a hint must never mask the error
+            return ""
+
+        parts = [f"{report.get('scanners_connectable', 0)} connectable scanner(s)"]
+        seen = report.get("last_service_info_connectable")
+        if isinstance(seen, dict):
+            parts.append(
+                f"last heard by {seen.get('source')} at {seen.get('rssi')} dBm"
+            )
+        else:
+            parts.append("but none of them has heard this label")
+        interval = report.get("learned_advertising_interval_s")
+        if isinstance(interval, (int, float)) and interval:
+            parts.append(f"advertising about every {interval:.0f}s")
+        return "; ".join(parts)
+
     def _reportable(
         self, kind: str, phase: str, elapsed: float, err: Exception
     ) -> Exception:
@@ -680,10 +707,21 @@ class ESLDevice:
         if isinstance(err, HomeAssistantError):
             return err
         detail = str(err).strip() or "no detail"
-        return HomeAssistantError(
+        message = (
             f"{self.address}: {kind} failed while {phase} after "
             f"{elapsed:.0f}s - {type(err).__name__}: {detail}"
         )
+        if phase == "connecting" and (hint := self._connection_hint()):
+            # The label was reachable enough to advertise or we would not
+            # have got this far, so the useful question is why the link
+            # itself will not come up.
+            message += (
+                f". The stack sees {hint}. A label that advertises but will "
+                "not connect is usually out of connection slots on the proxy, "
+                "too far for a reliable link even though its advertisements "
+                "arrive, or stuck and in need of a power cycle."
+            )
+        return HomeAssistantError(message)
 
     @callback
     def _record_command(
