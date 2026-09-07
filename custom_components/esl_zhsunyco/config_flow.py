@@ -28,6 +28,7 @@ from .const import (
     DEFAULT_MODEL,
     DEFAULT_SCAN_INTERVAL_MIN,
     DOMAIN,
+    MODEL_ALIASES,
     MODELS,
     PANEL_PX_MAX,
     PANEL_PX_MIN,
@@ -227,6 +228,7 @@ class ESLOptionsFlow(OptionsFlow):
             or self.config_entry.data.get(CONF_MODEL)
             or DEFAULT_MODEL
         )
+        model = MODEL_ALIASES.get(model, model)
         panel = MODELS.get(model, MODELS[DEFAULT_MODEL])
         return self.async_show_form(
             step_id="init",

@@ -334,21 +334,41 @@ Nothing in the protocol reports the panel's resolution. The version
 characteristic carries a product ID, but no mapping from that to a
 resolution is known, so an implementation has to be told the size.
 
-Sizes in circulation, for the four colour panels:
+The vendor's product sheet gives these, all IP65, 175 degree viewing angle:
 
-| Model | Pixels | Provenance |
-|---|---|---|
-| BLE-35BWRY / BLE-350BWRY | 184 × 384 | **[M]** |
-| BLE-290BWRY | 128 × 296 | reported by another implementation |
-| BLE-750BWRY | 800 × 480 | reported by another implementation |
+| Model | Screen | Resolution | Colours |
+|---|---|---|---|
+| BLE-154MBWRY | 1.54" | 200 x 200 | BWRY |
+| BLE-213BWRY | 2.13" | 250 x 128 | BWRY |
+| BLE-213MBW-L | 2.13" | 250 x 128 | BW |
+| BLE-266BWRY | 2.66" | 296 x 152 | BWRY |
+| BLE-290BWRY | 2.9" | 296 x 128 | BWRY |
+| BLE-350BWRY | 3.5" | 384 x 184 | BWRY |
+| BLE-370BWRY | 3.7" | 416 x 240 | BWRY |
+| BLE-420BWRY | 4.2" | 400 x 300 | BWRY |
+| BLE-583BWRY | 5.83" | 648 x 480 | BWRY |
+| BLE-750BWRY | 7.5" | 800 x 480 | BWRY |
 
-The two reported sizes come from
-[shorti1996/zhsunyco-esl-wolink](https://github.com/shorti1996/zhsunyco-esl-wolink).
-It expresses the 3.5" panel as 384 × 184 packed column-major, which is the
-same byte sequence as 184 × 384 packed row-major — the two descriptions of
-the measured panel agree. It also applies a mirror and a 90 degree rotation
-to the 2.9" panel, which suggests that panel's scan origin differs; that is
-unverified here.
+**The row axis on the wire is not always the long one.** This matters more
+than the resolution itself, because it decides the row stride:
+
+| Model | Sheet | Pixels per row | Provenance |
+|---|---|---|---|
+| BLE-350BWRY | 384 x 184 | 184 | **[M]** |
+| BLE-290BWRY | 296 x 128 | 128 | reported |
+| BLE-750BWRY | 800 x 480 | 800 | reported |
+
+The two smaller panels transmit their short axis as a row; the large one
+transmits its long axis. Nothing is known about the others, and nothing in
+the vendor document addresses it. The pixel count is unaffected either way,
+so a wrong choice shears the image diagonally rather than truncating it.
+
+The reported figures come from
+[shorti1996/zhsunyco-esl-wolink](https://github.com/shorti1996/zhsunyco-esl-wolink),
+which describes the 3.5" panel as 384 x 184 packed column-major - the same
+byte sequence as 184 x 384 packed row-major, so it agrees with the
+measurement here. It also applies a mirror and a 90 degree rotation to the
+2.9" panel, which suggests that panel's scan origin differs; unverified.
 
 ### 7.2 Four colour panels (BWRY) **[M]**
 
@@ -450,7 +470,8 @@ success.
 | OTA, `0xA505`–`0xA507` | Documented, deliberately not implemented |
 | Version field rendering | `03 30` could be `3.48`, `48.3` or `3.30` |
 | 1 bit pixel packing | Assumed, no mono panel measured |
-| Panel resolutions | Not in the document, and not reported by the label |
+| Panel resolutions | On the vendor sheet, but never reported by the label |
+| Row axis per model | Known for three of ten; not derivable from the resolution |
 | PID to model mapping | One PID known; not enough to map models |
 | Notify on the readable characteristics | Present, purpose unknown, unused |
 | Battery cell type and discharge curve | Not reported; voltage is all there is |

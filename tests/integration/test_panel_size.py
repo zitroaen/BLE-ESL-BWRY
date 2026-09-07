@@ -32,8 +32,10 @@ async def _set_options(hass: HomeAssistant, entry, **options):
 @pytest.mark.parametrize(
     ("model", "width", "height"),
     [
-        ("BLE-35BWRY", 184, 384),
+        ("BLE-154MBWRY", 200, 200),
         ("BLE-290BWRY", 128, 296),
+        ("BLE-350BWRY", 184, 384),
+        ("BLE-420BWRY", 400, 300),
         ("BLE-750BWRY", 800, 480),
     ],
 )
@@ -56,7 +58,7 @@ async def test_the_measured_model_is_unchanged(
     A row is 46 bytes at 2 bits per pixel and a full screen 17664, which is
     exactly what was transferred successfully.
     """
-    panel = MODELS["BLE-35BWRY"]
+    panel = MODELS["BLE-350BWRY"]
     assert (panel["width"], panel["height"]) == (184, 384)
     assert panel["width"] * 2 // 8 == 46
     assert 46 * panel["height"] == 17664
@@ -181,3 +183,46 @@ async def test_the_model_can_be_corrected_after_setup(
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert (device.width, device.height) == (800, 480)
+
+
+async def test_a_renamed_model_still_resolves(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """An entry from an older version names a model that no longer exists.
+
+    The vendor calls the 3.5" panel BLE-350BWRY; this integration used to
+    call it BLE-35BWRY. Falling back to the default would silently give the
+    wrong geometry to anyone who is not on the default model.
+    """
+    from custom_components.esl_zhsunyco.const import MODEL_ALIASES
+
+    device = await _setup(hass, config_entry)
+    await _set_options(hass, config_entry, **{CONF_MODEL: "BLE-35BWRY"})
+
+    assert device.model == "BLE-350BWRY"
+    assert (device.width, device.height) == (184, 384)
+
+    # And the prototype's names map to the panels they actually were.
+    assert MODEL_ALIASES["ET0290"] == "BLE-290BWRY"
+    assert MODEL_ALIASES["ET0420"] == "BLE-420BWRY"
+
+
+async def test_every_preset_matches_the_vendor_pixel_count(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """Width x height must be the resolution on the product sheet.
+
+    The row axis is not always the long one, so width and height can be the
+    other way round from the sheet - but the pixel count cannot differ, and
+    a typo in a preset would show up here.
+    """
+    for name, panel in MODELS.items():
+        vendor = tuple(int(part) for part in str(panel["vendor"]).split("x"))
+        assert sorted((panel["width"], panel["height"])) == sorted(vendor), name
+
+
+async def test_a_one_bit_panel_is_offered(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """The vendor sells a black and white model, so mono is not theoretical."""
+    assert MODELS["BLE-213MBW-L"]["format"] == "mono"

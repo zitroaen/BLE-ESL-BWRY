@@ -45,6 +45,7 @@ from .const import (
     ERROR_CODES,
     MANUFACTURER_ID,
     MANUFACTURER_ID_ALT,
+    MODEL_ALIASES,
     MODELS,
     UUID_COMMAND,
     UUID_SECURITY,
@@ -202,7 +203,10 @@ class ESLDevice:
         options rather than a code change.
         """
         options = self.entry.options
-        model = str(options.get(CONF_MODEL, self.model))
+        model = str(options.get(CONF_MODEL) or self.model)
+        # An entry written by an older version names a model that has since
+        # been renamed; resolve rather than silently falling back.
+        model = MODEL_ALIASES.get(model, model)
         panel = MODELS.get(model, MODELS[DEFAULT_MODEL])
         self.model = model
 

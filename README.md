@@ -6,10 +6,10 @@
 Put pictures on a battery-powered BLE e-ink shelf label from Home
 Assistant — a calendar, a dashboard, a name plate — and drive its LED.
 
-Works with labels running Wolink / Zhsunyco firmware, such as the
-`BLE-35BWRY` (184 × 384, black/white/red/yellow). Other sizes work too —
-see [Panel size](#panel-size). Local Bluetooth adapters and ESPHome
-Bluetooth proxies are both supported.
+Works with labels running Wolink / Zhsunyco firmware, in all ten sizes the
+vendor sells — 1.54" to 7.5", four colour or black and white. See
+[Panel size](#panel-size). Local Bluetooth adapters and ESPHome Bluetooth
+proxies are both supported.
 
 **This is the user manual.** The interface itself is specified separately in
 [`docs/protocol.md`](docs/protocol.md), and the measurements behind it are in
@@ -102,44 +102,61 @@ the label — not even Home Assistant.
 
 ## Panel size
 
-These labels are sold in several sizes, and the size is not something the
-label reports — it has to be configured. Three presets are built in:
+These labels are sold in ten sizes and the label never reports which one it
+is, so the size has to be configured. All ten are built in:
 
-| Model | Size | Pixels | Colours |
+| Model | Screen | Vendor resolution | Colours |
 |---|---|---|---|
-| `BLE-35BWRY` | 3.5" | 184 × 384 | four |
-| `BLE-290BWRY` | 2.9" | 128 × 296 | four |
+| `BLE-154MBWRY` | 1.54" | 200 × 200 | four |
+| `BLE-213BWRY` | 2.13" | 250 × 128 | four |
+| `BLE-213MBW-L` | 2.13" | 250 × 128 | black and white |
+| `BLE-266BWRY` | 2.66" | 296 × 152 | four |
+| `BLE-290BWRY` | 2.9" | 296 × 128 | four |
+| `BLE-350BWRY` | 3.5" | 384 × 184 | four |
+| `BLE-370BWRY` | 3.7" | 416 × 240 | four |
+| `BLE-420BWRY` | 4.2" | 400 × 300 | four |
+| `BLE-583BWRY` | 5.83" | 648 × 480 | four |
 | `BLE-750BWRY` | 7.5" | 800 × 480 | four |
 
-Only the 3.5" one is measured here. The other two come from
-[shorti1996/zhsunyco-esl-wolink](https://github.com/shorti1996/zhsunyco-esl-wolink),
-an independent implementation of the same protocol — better than a guess,
-but not verified against hardware in this project.
+If yours is not listed, or a preset turns out wrong, **panel width, height
+and colour depth are options in their own right** — leave width and height
+at `0` to take them from the model. All of it can be changed after setup,
+so picking the wrong model does not mean deleting and re-adding the label.
 
-**For anything else, set the size directly.** Panel width, height and
-colour depth are options; leave width and height at `0` to take them from
-the model. A label that is not in the list needs nothing more than its
-pixel dimensions to work.
+### One caveat worth reading
 
-All of this can be changed after setup, so picking the wrong model does not
-mean deleting and re-adding the label.
+The resolutions above are the vendor's. **The orientation the data is sent
+in is not always the same as the way the resolution is printed**, and that
+is not documented anywhere:
+
+| Model | Vendor prints | Pixels per row on the wire | |
+|---|---|---|---|
+| 3.5" | 384 × 184 | **184** | measured here |
+| 2.9" | 296 × 128 | **128** | reported |
+| 7.5" | 800 × 480 | **800** | reported |
+
+So the two smaller panels send their *short* axis as a row and the large
+one its long axis. For the models where nobody has checked, the preset
+follows the nearest known case — transposed up to 3.5", as printed from
+3.7" up. That is an interpolation between three data points, not a rule.
+
+Getting it wrong shears the picture diagonally and does nothing worse.
+**The fix is to swap width and height in the options.** Send the
+`diagnostic` test pattern first and it shows up immediately.
 
 ### If the picture comes out wrong
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Diagonal shearing, smeared gratings | Wrong width | Correct the width |
+| Diagonal shearing, smeared gratings | Width is the wrong axis | Swap width and height |
 | Only part of the panel is drawn | Wrong height | Correct the height |
 | Speckled where it should be flat | Dithering | `dither: false` |
 | Mirrored or rotated | The panel's scan origin | `mirror` / `rotate` on `set_image` |
 
-Send the `diagnostic` test pattern first — it is built to make exactly
-these visible.
-
-The last row is worth expecting on the 2.9" panel: the implementation
-linked above applies a mirror and a 90° rotation to it, which suggests its
-origin differs from the 3.5" one. Nothing is applied automatically here,
-because it has not been verified.
+The last row is worth expecting on the 2.9" panel: the implementation this
+data partly comes from applies a mirror and a 90° rotation to it, which
+suggests its origin differs from the 3.5" one. Nothing is applied
+automatically here, because it has not been verified.
 
 ## Battery level
 

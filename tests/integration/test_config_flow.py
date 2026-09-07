@@ -28,7 +28,7 @@ async def test_user_flow_creates_entry(hass: HomeAssistant, mock_bluetooth) -> N
         result["flow_id"],
         {
             CONF_ADDRESS: ADDRESS,
-            CONF_MODEL: "BLE-35BWRY",
+            CONF_MODEL: "BLE-350BWRY",
             CONF_SCAN_INTERVAL_MIN: 30,
         },
     )
@@ -48,7 +48,7 @@ async def test_user_flow_rejects_bad_address(
         result["flow_id"],
         {
             CONF_ADDRESS: "not-a-mac",
-            CONF_MODEL: "BLE-35BWRY",
+            CONF_MODEL: "BLE-350BWRY",
             CONF_SCAN_INTERVAL_MIN: 30,
         },
     )
@@ -67,7 +67,7 @@ async def test_user_flow_normalises_address(
         result["flow_id"],
         {
             CONF_ADDRESS: "66-66-54-20-00-55",
-            CONF_MODEL: "BLE-35BWRY",
+            CONF_MODEL: "BLE-350BWRY",
             CONF_SCAN_INTERVAL_MIN: 30,
         },
     )
@@ -88,7 +88,7 @@ async def test_duplicate_is_aborted(
         result["flow_id"],
         {
             CONF_ADDRESS: ADDRESS,
-            CONF_MODEL: "BLE-35BWRY",
+            CONF_MODEL: "BLE-350BWRY",
             CONF_SCAN_INTERVAL_MIN: 30,
         },
     )

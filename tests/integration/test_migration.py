@@ -10,6 +10,7 @@ from custom_components.esl_zhsunyco.const import (
     CONF_ADDRESS,
     CONF_MODEL,
     CONF_SCAN_INTERVAL_MIN,
+    DEFAULT_MODEL,
     DEFAULT_SCAN_INTERVAL_MIN,
     DOMAIN,
 )
@@ -19,6 +20,7 @@ def _legacy_entry(**overrides) -> MockConfigEntry:
     """Recreate exactly what the old integration wrote to .storage."""
     data = {
         "mac_address": "66:66:17:40:27:77",
+        # Deliberately the name the old version wrote, not the current one.
         "model": "BLE-35BWRY",
         "battery_scan_interval": "12:00:00",
     }
@@ -83,7 +85,7 @@ async def test_legacy_unknown_model_falls_back(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    assert entry.data[CONF_MODEL] == "BLE-35BWRY"
+    assert entry.data[CONF_MODEL] == DEFAULT_MODEL
 
 
 async def test_legacy_missing_interval_uses_default(

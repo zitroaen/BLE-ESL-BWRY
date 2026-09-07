@@ -46,7 +46,7 @@ BATTERY_MV_MAX: Final = 6000
 LEGACY_CONF_MAC: Final = "mac_address"
 LEGACY_CONF_BATTERY_INTERVAL: Final = "battery_scan_interval"
 
-DEFAULT_MODEL: Final = "BLE-35BWRY"
+DEFAULT_MODEL: Final = "BLE-350BWRY"
 DEFAULT_SCAN_INTERVAL_MIN: Final = 60
 
 # --- GATT characteristics -------------------------------------------------
@@ -137,45 +137,109 @@ ERROR_CODES: Final[dict[int, str]] = {
 }
 
 # --- Panels ---------------------------------------------------------------
-# Resolutions are NOT in the vendor document. They come from the hardware.
+# The vendor's product sheet gives each model's PHYSICAL resolution. That is
+# not the same as the geometry the upload needs, because the row axis on the
+# wire is not always the long one:
 #
-# BLE-35BWRY is measured here: 184 px per row is what makes a row 46 bytes
-# at 2 bits per pixel, and 46 x 384 is the 17664 byte full screen that was
-# transferred successfully. See docs/hardware-verified-findings.md section 4.
+#   model  physical   row axis on the wire
+#   350    384 x 184  184  measured here
+#   290    296 x 128  128  reported
+#   750    800 x 480  800  reported
 #
-# The other two come from an independent WOLINK implementation,
-# https://github.com/shorti1996/zhsunyco-esl-wolink, which lists them as
-# 296x128 and 800x480. That is second-hand: better than a guess, weaker
-# than a measurement, and marked "reported" in the picker for that reason.
-# It lists the 3.5" panel as 384x184 packed column-major, which is the same
-# bytes as 184x384 packed row-major - the two descriptions agree.
+# So the two smaller panels pack along their SHORT axis and the large one
+# along its long axis. "width" below is the row axis - the number that
+# decides how many bytes a row takes - and "vendor" keeps the sheet's figure
+# so the two can be compared.
 #
-# That implementation also applies a mirror and a 90 degree rotation to the
-# 2.9" panel, which suggests its scan origin differs. If a picture comes out
-# mirrored or rotated on one, the mirror and rotate options on set_image are
-# the fix; nothing is applied automatically, because it has not been
-# verified here.
+# For the models with no evidence either way, width follows the nearest
+# known case: transposed up to 3.5", the sheet's orientation from 3.7" up.
+# That is an interpolation between three data points, not a rule anyone has
+# established. Getting it wrong shears the picture diagonally and nothing
+# worse; swapping width and height in the options is the fix, and the
+# diagnostic test pattern makes it obvious in one send.
 #
-# "format" selects the pixel packer in imaging.py.
+# Reported figures come from https://github.com/shorti1996/zhsunyco-esl-wolink
+# and the vendor product sheet.
 MODELS: Final[dict[str, dict[str, int | str]]] = {
-    "BLE-35BWRY": {
-        "width": 184,
-        "height": 384,
+    "BLE-154MBWRY": {
+        "width": 200,
+        "height": 200,
         "format": "bwry",
-        "desc": '3.5" portrait, 4 colour (also sold as BLE-350BWRY)',
+        "vendor": "200x200",
+        "desc": '1.54" 200x200, 4 colour (square, so orientation cannot be wrong)',
+    },
+    "BLE-213BWRY": {
+        "width": 128,
+        "height": 250,
+        "format": "bwry",
+        "vendor": "250x128",
+        "desc": '2.13" 250x128, 4 colour (orientation unverified)',
+    },
+    "BLE-213MBW-L": {
+        "width": 128,
+        "height": 250,
+        "format": "mono",
+        "vendor": "250x128",
+        "desc": '2.13" 250x128, black and white (unverified)',
+    },
+    "BLE-266BWRY": {
+        "width": 152,
+        "height": 296,
+        "format": "bwry",
+        "vendor": "296x152",
+        "desc": '2.66" 296x152, 4 colour (orientation unverified)',
     },
     "BLE-290BWRY": {
         "width": 128,
         "height": 296,
         "format": "bwry",
-        "desc": '2.9", 4 colour (reported, not verified here)',
+        "vendor": "296x128",
+        "desc": '2.9" 296x128, 4 colour (orientation reported)',
+    },
+    "BLE-350BWRY": {
+        "width": 184,
+        "height": 384,
+        "format": "bwry",
+        "vendor": "384x184",
+        "desc": '3.5" 384x184, 4 colour (verified on hardware)',
+    },
+    "BLE-370BWRY": {
+        "width": 416,
+        "height": 240,
+        "format": "bwry",
+        "vendor": "416x240",
+        "desc": '3.7" 416x240, 4 colour (orientation unverified)',
+    },
+    "BLE-420BWRY": {
+        "width": 400,
+        "height": 300,
+        "format": "bwry",
+        "vendor": "400x300",
+        "desc": '4.2" 400x300, 4 colour (orientation unverified)',
+    },
+    "BLE-583BWRY": {
+        "width": 648,
+        "height": 480,
+        "format": "bwry",
+        "vendor": "648x480",
+        "desc": '5.83" 648x480, 4 colour (orientation unverified)',
     },
     "BLE-750BWRY": {
         "width": 800,
         "height": 480,
         "format": "bwry",
-        "desc": '7.5", 4 colour (reported, not verified here)',
+        "vendor": "800x480",
+        "desc": '7.5" 800x480, 4 colour (orientation reported)',
     },
+}
+
+# The vendor calls the 3.5" panel BLE-350BWRY; earlier versions of this
+# integration called it BLE-35BWRY, and the pre-HACS prototype offered two
+# easyTag style names. Resolve them rather than breaking those entries.
+MODEL_ALIASES: Final[dict[str, str]] = {
+    "BLE-35BWRY": "BLE-350BWRY",
+    "ET0290": "BLE-290BWRY",
+    "ET0420": "BLE-420BWRY",
 }
 
 # Pixel packers imaging.py can produce.
