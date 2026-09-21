@@ -74,8 +74,14 @@ one of them is a drawing:
 | Project file | `pages` with `widgets`, pins, deep sleep, glyphsets | No — that describes a device for a firmware build |
 | Home Assistant Service Call (JSON) | a `payload` list of drawing elements | Yes |
 
-Handing over the project file is refused with a message saying so. The
-right export looks roughly like this:
+Handing over the project file is refused with a message saying so.
+
+To get the right one in
+[ESPHomeDesigner](https://github.com/koosoli/ESPHomeDesigner): switch the
+output mode to **OpenEpaperLink**, put anything in the tag entity field
+(it only lands in `target`, which this integration ignores - it addresses
+labels by `device_id`), and copy the JSON. The result looks roughly like
+this:
 
 ```yaml
 service: open_epaper_link.drawcustom
@@ -90,8 +96,29 @@ data:
 ```
 
 Change the service to `esl_zhsunyco.drawcustom`, replace `target` with a
-`device_id` in `data`, and the `data` block goes through unchanged. You can
-also hand the whole `data` block in as `payload` and it will be unwrapped.
+`device_id` in `data`, and the `data` block goes through unchanged.
+
+There is also a shortcut that needs no editing at all: hand the copied
+block over *as* the payload, and it is unwrapped on the way in. `target`
+and the service name are ignored, and `background`, `rotate` and `dither`
+are read out of it:
+
+```yaml
+action: esl_zhsunyco.drawcustom
+data:
+  device_id: <your label>
+  payload: |
+    {
+      "service": "open_epaper_link.drawcustom",
+      "target": {"entity_id": "open_epaper_link.000002ABCDEF"},
+      "data": {"background": "white", "rotate": 0, "dither": 2,
+               "payload": [{"type": "text", "value": "Test", "x": 40, "y": 40}]}
+    }
+```
+
+That works whether you paste it as JSON text (as above) or as a YAML
+block, which makes it a straight copy from the Designer into an
+automation.
 
 ## Coordinates and colours
 

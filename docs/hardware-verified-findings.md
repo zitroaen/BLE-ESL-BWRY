@@ -350,3 +350,37 @@ Both take effect, in little endian:
 Section 9 recorded that every measurement had gone over a direct adapter and
 that a proxy might differ, especially on MTU and timing. It does not: the
 same 180 byte slices, the same frames, the same result.
+
+---
+
+## 11. Addendum: a second panel size, the 7.5" BLE-750BWRY
+
+Everything above was measured on a 3.5" BLE-35BWRY. A 7.5" BLE-750BWRY has
+now shown the same stack working unchanged, which settles the one thing the
+preset table could only guess at for that model.
+
+Sent: a `drawcustom` layout given in percentages, so it carried no built-in
+assumption about the geometry - one line of text near the top left and two
+100 x 100 squares side by side, one `#FFF000`, one `#FF0000`.
+
+What came back off the panel:
+
+| Question | Answer |
+|---|---|
+| Row axis | **800**, as the vendor sheet prints it, not transposed |
+| Height | **480** |
+| Packing | 2 bpp BWRY, MSB first - the same as the 3.5" |
+| Palette | The yellow square is yellow, the red one red |
+| Compression | On by default, and the panel accepted it |
+
+Had the row axis been 480, the picture would have sheared diagonally; it
+did not. So `MODELS["BLE-750BWRY"]` with width 800 and height 480 is
+measured now, not reported, and the "as printed from 3.7 inch up"
+interpolation in that table has its first confirmation above 3.5".
+
+A full screen is 800 x 480 x 2 bits = **96000 bytes** raw, five and a half
+times the 3.5" panel. That is the size compression matters most at.
+
+Still unverified for this model: the scan origin (whether a mirror or
+rotation is needed for some content), since a symmetric test layout cannot
+show it.

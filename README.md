@@ -134,12 +134,14 @@ is not documented anywhere:
 |---|---|---|---|
 | 3.5" | 384 × 184 | **184** | measured here |
 | 2.9" | 296 × 128 | **128** | reported |
-| 7.5" | 800 × 480 | **800** | reported |
+| 7.5" | 800 × 480 | **800** | measured here |
 
 So the two smaller panels send their *short* axis as a row and the large
 one its long axis. For the models where nobody has checked, the preset
 follows the nearest known case — transposed up to 3.5", as printed from
-3.7" up. That is an interpolation between three data points, not a rule.
+3.7" up. That is an interpolation between three data points, not a rule —
+but its upper end is confirmed: the 7.5" panel draws correctly at 800 × 480
+with no swap.
 
 Getting it wrong shears the picture diagonally and does nothing worse.
 **The fix is to swap width and height in the options.** Send the
@@ -298,10 +300,14 @@ data:
 ```
 
 The element format is the one OpenEPaperLink uses, which is what the
-**ESPHome Designer** exports under *Home Assistant Service Call (JSON)*.
-Design the screen there, export it, change the service name to
-`esl_zhsunyco.drawcustom`, and put your `device_id` in place of the
-`target`. The rest of the exported block goes through unchanged.
+**ESPHome Designer** exports in *OpenEpaperLink* mode. Design the screen
+there, copy the JSON, and hand the whole copied block over as `payload` —
+the `target` and the service name in it are ignored, and `background`,
+`rotate` and `dither` are read out of it. Nothing has to be edited by hand.
+
+Careful with **which** export: the Designer's project file (the one with
+`pages` and `widgets`) describes a device for a firmware build, not a
+drawing, and is refused with a message saying so.
 
 Fifteen element types are supported — text, multiline, line, rectangle,
 rectangle_pattern, polygon, circle, ellipse, arc, progress_bar, icon,

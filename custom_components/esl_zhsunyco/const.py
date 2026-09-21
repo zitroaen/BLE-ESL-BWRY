@@ -144,7 +144,7 @@ ERROR_CODES: Final[dict[int, str]] = {
 #   model  physical   row axis on the wire
 #   350    384 x 184  184  measured here
 #   290    296 x 128  128  reported
-#   750    800 x 480  800  reported
+#   750    800 x 480  800  measured here
 #
 # So the two smaller panels pack along their SHORT axis and the large one
 # along its long axis. "width" below is the row axis - the number that
@@ -154,9 +154,12 @@ ERROR_CODES: Final[dict[int, str]] = {
 # For the models with no evidence either way, width follows the nearest
 # known case: transposed up to 3.5", the sheet's orientation from 3.7" up.
 # That is an interpolation between three data points, not a rule anyone has
-# established. Getting it wrong shears the picture diagonally and nothing
-# worse; swapping width and height in the options is the fix, and the
-# diagnostic test pattern makes it obvious in one send.
+# established - but the 7.5" end of it has now been confirmed on hardware.
+# See docs/hardware-verified-findings.md section 11.
+#
+# Getting it wrong shears the picture diagonally and nothing worse;
+# swapping width and height in the options is the fix, and the diagnostic
+# test pattern makes it obvious in one send.
 #
 # Reported figures come from https://github.com/shorti1996/zhsunyco-esl-wolink
 # and the vendor product sheet.
@@ -229,7 +232,7 @@ MODELS: Final[dict[str, dict[str, int | str]]] = {
         "height": 480,
         "format": "bwry",
         "vendor": "800x480",
-        "desc": '7.5" 800x480, 4 colour (orientation reported)',
+        "desc": '7.5" 800x480, 4 colour (orientation measured)',
     },
 }
 
