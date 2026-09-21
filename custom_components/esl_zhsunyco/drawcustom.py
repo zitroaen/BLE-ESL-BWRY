@@ -117,6 +117,28 @@ def _fail(where: str, message: str) -> DrawError:
     return DrawError(f"{where}: {message}")
 
 
+def _no_payload_key(payload: dict[str, Any]) -> str:
+    """Say what arrived instead of a payload, and what to do about it.
+
+    The ESPHome Designer has two exports that both look like "the JSON":
+    the project file, which describes the device for a firmware build, and
+    the Home Assistant service call, which is the one with the drawing
+    elements in it. Handing over the first is an easy mistake and the
+    difference is not obvious from either file, so name it.
+    """
+    if isinstance(payload.get("pages"), list) and any(
+        isinstance(page, dict) and "widgets" in page for page in payload["pages"]
+    ):
+        return (
+            "this is an ESPHome Designer project file - it describes a "
+            "device (pages, widgets, pins), not a drawing. In the Designer, "
+            "export the layout as 'Home Assistant Service Call (JSON)' "
+            "instead; that export has a 'payload' list of elements"
+        )
+    keys = ", ".join(sorted(payload)[:8]) or "nothing"
+    return f"payload object has no 'payload' key with the elements (it has: {keys})"
+
+
 def normalise(payload: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Accept the shapes a Designer export can arrive in.
 
@@ -140,7 +162,7 @@ def normalise(payload: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         if "payload" not in payload and isinstance(payload.get("data"), dict):
             payload = payload["data"]
         if "payload" not in payload:
-            raise DrawError("payload object has no 'payload' key with the elements")
+            raise DrawError(_no_payload_key(payload))
         options = {k: v for k, v in payload.items() if k != "payload"}
         payload = payload["payload"]
 

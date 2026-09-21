@@ -66,7 +66,16 @@ the README.
 
 ### Pasting an export
 
-An ESPHome Designer export looks roughly like this:
+The Designer has **two** exports that both look like "the JSON", and only
+one of them is a drawing:
+
+| Export | What it contains | Use it here? |
+|---|---|---|
+| Project file | `pages` with `widgets`, pins, deep sleep, glyphsets | No — that describes a device for a firmware build |
+| Home Assistant Service Call (JSON) | a `payload` list of drawing elements | Yes |
+
+Handing over the project file is refused with a message saying so. The
+right export looks roughly like this:
 
 ```yaml
 service: open_epaper_link.drawcustom

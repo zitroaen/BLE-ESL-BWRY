@@ -234,6 +234,23 @@ def test_broken_json_says_it_is_broken() -> None:
         drawcustom.normalise("[{")
 
 
+def test_a_designer_project_file_says_which_export_to_use() -> None:
+    """The mistake is easy to make: both exports are "the JSON"."""
+    project = {
+        "device_id": "reterminal_e1001",
+        "pages": [{"id": "page_0", "widgets": [{"type": "label", "x": 40}]}],
+        "width": 800,
+        "height": 480,
+    }
+    with pytest.raises(drawcustom.DrawError, match="Home Assistant Service Call"):
+        drawcustom.normalise(project)
+
+
+def test_an_object_without_elements_lists_what_it_did_have() -> None:
+    with pytest.raises(drawcustom.DrawError, match="it has: background, rotate"):
+        drawcustom.normalise({"background": "white", "rotate": 0})
+
+
 def test_validate_rejects_an_unknown_type() -> None:
     with pytest.raises(drawcustom.DrawError, match="unknown type"):
         drawcustom.validate([{"type": "sparkline"}])
