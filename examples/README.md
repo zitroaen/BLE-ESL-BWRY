@@ -19,6 +19,18 @@ Four calendars, told apart by how an entry is marked:
 The weekend headers are yellow, and they move: the columns start at today,
 so Saturday and Sunday are wherever they fall this week.
 
+### Run it as a script, not as one action
+
+The entries come from the first step, which hands them on as
+`response_variable: agenda`. Starting only the `drawcustom` action — the
+obvious thing to try from Developer Tools — leaves that variable
+undefined. Rather than failing with `UndefinedError: 'agenda' is
+undefined`, the layout then draws a line saying so, so a half run looks
+like a half run.
+
+To run the whole thing: **Developer Tools → Actions → `script.turn_on`**
+with this script as the target, or the Run button in the script editor.
+
 ### What to change
 
 1. The four `calendar.` entity ids — in the `calendar.get_events` target

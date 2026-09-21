@@ -7,6 +7,11 @@
 #             Kalendern erzeugt.
 #
 # Anpassen: die vier Kalender-Entitaeten unten im Template, und device_id.
+#
+# WICHTIG: als Skript ausfuehren, nicht als einzelne Aktion. Die Termine
+# entstehen im ersten Schritt (response_variable: agenda); wer nur den
+# drawcustom-Schritt startet, hat diese Variable nicht.
+#   Entwicklerwerkzeuge -> Aktionen -> "Skript: ESL Wochenkalender"
 
 alias: ESL Wochenkalender
 mode: single
@@ -185,6 +190,24 @@ sequence:
                         'August','September','Oktober','November','Dezember'] %}
         {% set heute = today_at() %}
         {% set ns = namespace(tage=[], termine=[], out=[]) %}
+
+        {#- Beide Variablen entstehen in den Schritten davor. Fehlen sie,
+            wurde nur diese Aktion ausgefuehrt statt des ganzen Skripts;
+            dann wird das gesagt, statt mit UndefinedError abzubrechen. -#}
+        {%- set chrome = chrome | default([]) %}
+        {%- set agenda = agenda | default({}) %}
+        {%- if not chrome %}
+          {%- set ns.out = ns.out + [
+                {'type':'rectangle','x_start':40,'y_start':190,'x_end':760,
+                 'y_end':290,'fill':'yellow','outline':'black','width':2},
+                {'type':'text','value':'Nur diese Aktion ausgeführt',
+                 'x':400,'y':212,'size':26,'font':'Roboto-Bold',
+                 'color':'black','anchor':'ma'},
+                {'type':'text',
+                 'value':'Das ganze Skript starten – die Termine kommen '
+                         'aus dem Schritt davor','x':400,'y':250,'size':17,
+                 'color':'black','anchor':'ma'} ] %}
+        {%- endif %}
 
         {%- for i in range(7) %}
           {%- set ns.tage = ns.tage + [(heute + timedelta(days=i)).strftime('%Y-%m-%d')] %}

@@ -129,6 +129,35 @@ def test_the_weekend_columns_are_highlighted_where_the_weekend_falls() -> None:
     assert sorted(element["x_start"] for element in yellow) == [600, 700]
 
 
+def test_running_only_the_action_says_so_on_the_panel() -> None:
+    """Half the script is an easy mistake; it must not be a stack trace.
+
+    The events come from the step before, so running the drawcustom action
+    on its own used to end in UndefinedError, which reaches the user as
+    one unhelpful line. Now it draws a sentence saying what to do.
+    """
+    document = yaml.safe_load((EXAMPLES / "week_calendar.yaml").read_text("utf-8"))
+    template = next(
+        s["data"]["payload"]
+        for s in document["sequence"]
+        if s.get("action") == "esl_zhsunyco.drawcustom"
+    )
+    environment = Environment()  # noqa: S701 - not rendering HTML
+    environment.filters["to_json"] = lambda value: json.dumps(value, ensure_ascii=False)
+
+    # Neither chrome nor agenda: exactly what a standalone run has.
+    elements = json.loads(
+        environment.from_string(template).render(
+            today_at=lambda *_: TODAY, timedelta=dt.timedelta, none=None
+        )
+    )
+    drawcustom.validate(elements)
+    assert any(
+        "Skript" in str(element.get("value", "")) for element in elements
+    ), "the hint is missing"
+    assert _draw(elements).width == WIDTH
+
+
 def test_the_designer_layout_still_draws() -> None:
     block = json.loads((EXAMPLES / "week_calendar_layout.json").read_text("utf-8"))
     elements, options = drawcustom.normalise(block)
