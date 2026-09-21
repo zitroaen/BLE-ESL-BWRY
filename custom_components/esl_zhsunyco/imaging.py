@@ -79,6 +79,7 @@ def _open_source(request: ImageRequest, width: int, height: int):
             background=options.get("background", "white"),
             rotate=options.get("rotate", 0),
             resources=request.resources,
+            antialias=options.get("antialias", True),
         )
 
     if request.pattern is not None:

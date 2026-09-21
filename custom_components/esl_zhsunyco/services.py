@@ -169,6 +169,7 @@ DRAWCUSTOM_SCHEMA = vol.All(
             vol.Optional("background"): cv.string,
             vol.Optional("rotate"): vol.All(vol.Coerce(int), vol.In([0, 90, 180, 270])),
             vol.Optional("dither"): _dither_flag,
+            vol.Optional("antialias"): cv.boolean,
         }
     ),
 )
@@ -396,6 +397,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         background = call.data.get("background", options.get("background", "white"))
         rotate = call.data.get("rotate", options.get("rotate", 0)) or 0
         dither = call.data.get("dither", options.get("dither", True))
+        antialias = call.data.get("antialias", options.get("antialias", True))
         try:
             drawcustom.parse_color(background, "background")
             rotate = int(rotate)
@@ -415,7 +417,11 @@ def async_setup_services(hass: HomeAssistant) -> None:
 
         request = ImageRequest(
             payload=elements,
-            payload_options={"background": background, "rotate": rotate},
+            payload_options={
+                "background": background,
+                "rotate": rotate,
+                "antialias": bool(antialias),
+            },
             resources=resources,
             dither=dither,
             # Drawn at panel resolution already; fitting would letterbox it.

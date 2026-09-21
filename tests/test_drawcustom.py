@@ -124,6 +124,34 @@ def test_a_progress_bar_fills_from_the_left() -> None:
     assert image.getpixel((75, 10)) == WHITE
 
 
+def test_german_text_is_not_drawn_as_empty_boxes() -> None:
+    """Pillow's own font has no umlauts, which is why Roboto is bundled.
+
+    A missing glyph is not an error anywhere - the font quietly draws
+    .notdef, an empty rectangle - so the check is that an umlaut does not
+    come out as that rectangle.
+    """
+    font = drawcustom._load_font(None, 24)
+    assert font.getname()[0] == "Roboto"
+
+    def glyph(character: str) -> bytes:
+        from PIL import ImageDraw
+
+        image = Image.new("L", (40, 40), 255)
+        ImageDraw.Draw(image).text((4, 4), character, font=font, fill=0)
+        return image.tobytes()
+
+    notdef = glyph("\ue000")  # private use area: never mapped by a real font
+    for character in "äöüÄÖÜß":
+        assert glyph(character) != notdef, character
+
+
+def test_a_bold_font_name_gets_the_bold_weight() -> None:
+    """Payloads name fonts we do not ship; the weight still has to land."""
+    assert drawcustom._load_font("ppb.ttf", 16).getname() == ("Roboto", "Bold")
+    assert drawcustom._load_font("rbm.ttf", 16).getname() == ("Roboto", "Regular")
+
+
 def test_an_icon_is_drawn_from_the_bundled_font() -> None:
     image = render(
         [{"type": "icon", "value": "mdi:cake-variant", "x": 0, "y": 0, "size": 48}]
@@ -189,6 +217,18 @@ def test_rotating_swaps_the_canvas_so_the_layout_still_fits() -> None:
     )
     assert image.size == (WIDTH, HEIGHT)
     assert image.getpixel((WIDTH - 2, HEIGHT - 2)) == RED
+
+
+def test_antialiasing_can_be_turned_off_for_crisp_text() -> None:
+    """A four colour panel has no grey to put a soft edge in."""
+    element = {"type": "text", "value": "Kalender", "x": 4, "y": 4, "size": 16}
+    smooth = {colour for _, colour in render([element]).getcolors(100000)}
+    crisp = {
+        colour for _, colour in render([element], antialias=False).getcolors(100000)
+    }
+
+    assert crisp == {BLACK, WHITE}
+    assert len(smooth) > 2, "the smooth render should have grey edge pixels"
 
 
 def test_halftones_become_a_mixed_colour_for_the_ditherer() -> None:

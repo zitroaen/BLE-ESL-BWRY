@@ -173,6 +173,31 @@ async def test_json_text_from_a_template_is_accepted(
     assert len(raw_payload(uploaded[0])) == 184 * 384 // 4
 
 
+async def test_antialias_false_reaches_the_renderer(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """The option is ours, not OpenEPaperLink's, so it has to be plumbed."""
+    device = await _setup(hass, config_entry)
+    await _call(
+        hass,
+        {
+            "device_id": _device_id(hass, config_entry),
+            "antialias": False,
+            "dither": False,
+            "payload": [{"type": "text", "value": "Kalender", "x": 4, "y": 4}],
+        },
+        [],
+    )
+
+    from PIL import Image
+
+    preview = Image.open(BytesIO(device.state.last_image_png))
+    assert {colour for _, colour in preview.getcolors(100000)} == {
+        (0, 0, 0),
+        (255, 255, 255),
+    }
+
+
 async def test_a_bad_element_is_refused_before_any_radio_work(
     hass: HomeAssistant, config_entry, mock_bluetooth
 ) -> None:

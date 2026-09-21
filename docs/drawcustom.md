@@ -50,6 +50,7 @@ data:
 | `background` | `white` | Colour the canvas starts as |
 | `rotate` | `0` | Turn the finished layout by 0, 90, 180 or 270 degrees, counter-clockwise |
 | `dither` | `true` | Floyd-Steinberg dithering when reducing to the panel palette |
+| `antialias` | `true` | Smooth glyph edges. Set `false` for text that lands exactly on the pixel grid |
 
 A rotated layout is drawn on a canvas with the panel's dimensions swapped,
 so a `rotate: 90` design on a 184x384 panel is laid out 384 wide and 184
@@ -266,14 +267,45 @@ Any other unknown `type` is an error naming the element and listing what is
 supported. Nothing is skipped silently: a layout that half draws is worse
 than one that refuses.
 
+## Crisp text
+
+A four colour panel has no grey to put a soft edge in. An antialiased
+glyph edge therefore gets quantised to whatever is nearest: ragged stems
+with `dither: false`, speckled ones with dithering on. For a layout that
+is mostly text - a calendar, a table, a label - turn it off:
+
+```yaml
+data:
+  device_id: <your label>
+  antialias: false
+  dither: false
+  payload: ...
+```
+
+Every glyph pixel is then either fully set or not set at all, and the
+text lands on whole pixels. Combine it with whole-number coordinates
+(not percentages) and nothing is resampled anywhere in the chain.
+
+Photographs still want `dither: true`; the two settings are independent,
+because `antialias` only touches glyph rendering and `dither` only the
+final reduction to the palette.
+
 ## Fonts
 
-`text` and `multiline` use Pillow's built-in scalable font at whatever
-`size` says. A `font` naming one of the fonts an OpenEPaperLink export
-mentions (`ppb.ttf`, `rbm.ttf` and friends) is accepted and ignored — those
-files are not shipped, and at these sizes the difference is not worth a
-megabyte per face. Any other `font` is treated as a path and loaded if it
-exists, so you can point at a `.ttf` in your config directory.
+`text` and `multiline` draw in **Roboto**, bundled with the integration in
+a regular and a bold weight. That is the same face the ESPHome Designer
+previews a layout with, so what you arrange there is what the panel shows.
+
+Roboto is bundled rather than borrowed because Pillow's own built-in font
+covers ASCII and nothing else: it draws `Müller` with an empty box where
+the umlaut belongs, silently, because a missing glyph is not an error.
+
+| `font` | What you get |
+|---|---|
+| left out | Roboto Regular |
+| `Roboto`, `Roboto-Bold`, `rbm.ttf`, `ppb.ttf`, … | Roboto, bold if the name says so (`bold`, `black`, `heavy`, `…b.ttf`) |
+| a path to a `.ttf` | that file, so a font in your config directory works |
+| anything else | Roboto Regular |
 
 ## Errors
 

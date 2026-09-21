@@ -277,6 +277,10 @@
         "dither": {
           "name": "Dithering",
           "description": "Floyd-Steinberg-Dithering beim Reduzieren auf die Displayfarben. Damit werden half_black und half_red zu einem Muster."
+        },
+        "antialias": {
+          "name": "Kantenglättung",
+          "description": "Glättet die Kanten von Text und Symbolen. Aus wird jedes Pixel ganz gesetzt oder gar nicht, was auf einem Vierfarb-Display schärfer aussieht."
         }
       }
     }

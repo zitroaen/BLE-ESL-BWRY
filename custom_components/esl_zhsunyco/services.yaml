@@ -196,3 +196,8 @@ drawcustom:
       example: true
       selector:
         boolean:
+    antialias:
+      required: false
+      example: false
+      selector:
+        boolean:

@@ -22,6 +22,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,8 @@ _LOGGER = logging.getLogger(__name__)
 ASSETS = Path(__file__).parent / "assets"
 MDI_FONT = ASSETS / "materialdesignicons-webfont.ttf"
 MDI_CODEPOINTS = ASSETS / "mdi-codepoints.json"
+TEXT_FONT = ASSETS / "Roboto-Regular.ttf"
+TEXT_FONT_BOLD = ASSETS / "Roboto-Bold.ttf"
 
 
 class DrawError(ValueError):
@@ -65,12 +68,29 @@ COLORS: dict[str, tuple[int, int, int]] = {
     "hy": (255, 255, 128),
 }
 
-# Fonts an OpenEPaperLink payload names. We do not ship them, and a label
-# this small shows no difference worth a megabyte of font files, so they all
-# resolve to Pillow's built in scalable font.
+# Font names that an OpenEPaperLink payload or an ESPHome Designer export
+# uses. None of them are on a Home Assistant box, so looking for the file
+# would only waste a stat call per string drawn: they go straight to the
+# bundled Roboto, in the weight the name asks for.
 _KNOWN_FONT_NAMES = frozenset(
-    {"ppb.ttf", "rbm.ttf", "bahnschrift.ttf", "segoeui.ttf", "arial.ttf"}
+    {
+        "ppb.ttf",
+        "rbm.ttf",
+        "bahnschrift.ttf",
+        "segoeui.ttf",
+        "arial.ttf",
+        "roboto",
+        "roboto-regular",
+        "roboto-regular.ttf",
+        "roboto-bold",
+        "roboto-bold.ttf",
+        "roboto-medium",
+        "roboto-medium.ttf",
+    }
 )
+
+# Substrings that mean "the heavy weight, please".
+_BOLD_HINTS = ("bold", "black", "heavy", "b.ttf", "-b")
 
 _COLOR_TAG = re.compile(r"\[(/?)([a-z_]+)\]")
 
@@ -306,16 +326,53 @@ def _int(element: dict, key: str, default: int, ctx: _Context) -> int:
         raise _fail(ctx.where, f"{key}={value!r} is not a whole number") from err
 
 
-def _load_font(name: Any, size: int):
-    """Pick a font. Pillow's built in one is scalable and always present."""
+@lru_cache(maxsize=64)
+def _font_file(path: str, size: int):
+    """Open a font file once per size; a layout draws many strings."""
     from PIL import ImageFont
 
-    if isinstance(name, str) and name and name.lower() not in _KNOWN_FONT_NAMES:
-        try:
-            return ImageFont.truetype(name, size)
-        except OSError:
-            _LOGGER.debug("font %s not available, using the built in font", name)
+    return ImageFont.truetype(path, size)
+
+
+def _bundled_font(size: int, *, bold: bool):
+    """Roboto, or Pillow's own font if the assets are not there.
+
+    The fallback keeps a missing asset from taking the whole render down,
+    but it cannot draw an umlaut, so it is a last resort and says so.
+    """
+    from PIL import ImageFont
+
+    path = TEXT_FONT_BOLD if bold else TEXT_FONT
+    if path.is_file():
+        return _font_file(str(path), size)
+    _LOGGER.warning(
+        "%s is missing, falling back to the built in font - it has no "
+        "umlauts and no accents. Run scripts/fetch_assets.py",
+        path.name,
+    )
     return ImageFont.load_default(size=size)
+
+
+def _load_font(name: Any, size: int):
+    """Pick a font for a text element.
+
+    A name the payload gives is tried as a file first, so a `.ttf` in the
+    config directory works. The names the drawing tools emit are not files
+    on this machine, so those resolve to the bundled Roboto - which is
+    also what the ESPHome Designer previews with.
+    """
+    if not isinstance(name, str) or not name.strip():
+        return _bundled_font(size, bold=False)
+
+    key = name.strip()
+    lower = key.lower()
+    bold = any(hint in lower for hint in _BOLD_HINTS)
+    if lower not in _KNOWN_FONT_NAMES:
+        try:
+            return _font_file(key, size)
+        except OSError:
+            _LOGGER.debug("font %s not available, using the bundled font", key)
+    return _bundled_font(size, bold=bold)
 
 
 def _line_height(font) -> float:
@@ -712,11 +769,9 @@ def _icon_char(name: Any, ctx: _Context) -> str:
 
 
 def _icon_font(size: int, ctx: _Context):
-    from PIL import ImageFont
-
     if not MDI_FONT.is_file():
         raise _fail(ctx.where, f"the icon font is missing at {MDI_FONT}")
-    return ImageFont.truetype(str(MDI_FONT), size)
+    return _font_file(str(MDI_FONT), size)
 
 
 def _render_icon(draw, element: dict, ctx: _Context) -> None:
@@ -865,6 +920,7 @@ def render_payload(
     background: Any = "white",
     rotate: int = 0,
     resources: dict[str, bytes] | None = None,
+    antialias: bool = True,
 ):
     """Draw the payload and return an RGB image of exactly width x height.
 
@@ -872,6 +928,12 @@ def render_payload(
     other orientation, so the elements are drawn on a swapped canvas and the
     result is turned to fit the panel. That way percentages and coordinates
     in the export mean what the designer saw.
+
+    With `antialias` off, glyphs are rendered bi-level: every pixel is
+    either on or off, so text and icons land exactly on the pixel grid.
+    That is usually what you want here. A panel with four colours has no
+    grey to put a soft edge in, so an antialiased edge is quantised to
+    whatever is nearest - ragged with dithering off, speckled with it on.
     """
     from PIL import Image, ImageDraw
 
@@ -882,6 +944,9 @@ def render_payload(
     canvas_w, canvas_h = (height, width) if rotate in (90, 270) else (width, height)
     canvas = Image.new("RGB", (canvas_w, canvas_h), parse_color(background))
     draw = ImageDraw.Draw(canvas)
+    if not antialias:
+        # Pillow's own switch for bi-level glyph rendering.
+        draw.fontmode = "1"
     ctx = _Context(width=canvas_w, height=canvas_h, resources=resources or {})
 
     for index, element in enumerate(elements):
