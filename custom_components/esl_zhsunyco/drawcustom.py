@@ -504,8 +504,15 @@ def _render_text(draw, element: dict, ctx: _Context) -> None:
         limit = _number(max_width, ctx.width, ctx, "max_width")
         plain = _COLOR_TAG.sub("", value) if parse_colors else value
         if element.get("truncate"):
-            while len(plain) > 1 and draw.textlength(plain, font=font) > limit:
-                plain = plain[:-1]
+            if draw.textlength(plain, font=font) > limit:
+                # Cut to fit and say that something was cut. An ellipsis
+                # is one glyph wide where three dots are three.
+                while (
+                    len(plain) > 1
+                    and draw.textlength(plain + "\u2026", font=font) > limit
+                ):
+                    plain = plain[:-1]
+                plain = plain.rstrip(" ") + "\u2026"
             lines = [plain]
             parse_colors = False
         else:

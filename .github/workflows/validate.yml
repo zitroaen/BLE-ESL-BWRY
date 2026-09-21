@@ -56,4 +56,5 @@ jobs:
       - run: python tests/test_diagnostics.py
       - run: python tests/test_imaging.py
       - run: pytest tests/test_drawcustom.py -q
+      - run: python tests/test_examples.py
       - run: pytest tests/integration -q

@@ -317,6 +317,20 @@ Design Icons set bundled so icons work offline.
 
 **[docs/drawcustom.md](docs/drawcustom.md) is the full reference**: every
 element, every property, every colour name.
+**[examples/](examples/)** has a complete week calendar — four calendars
+on one 800 × 480 panel, colour coded, with the script that keeps it
+current.
+
+For a screen made mostly of text, turn off both smoothing steps:
+
+```yaml
+data:
+  antialias: false   # every glyph pixel fully on or off
+  dither: false      # no speckle in flat colour
+```
+
+Text is drawn in Roboto, bundled with the integration, so umlauts and
+accents come out as letters rather than as empty boxes.
 
 A mistake in the payload is refused with the element named, before the label
 is woken up:

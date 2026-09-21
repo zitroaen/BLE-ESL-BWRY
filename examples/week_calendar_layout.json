@@ -1,0 +1,524 @@
+{
+  "background": "white",
+  "rotate": 0,
+  "dither": 2,
+  "payload": [
+    {
+      "type": "rectangle",
+      "x_start": 0,
+      "y_start": 0,
+      "x_end": 800,
+      "y_end": 4,
+      "fill": "red",
+      "outline": null
+    },
+    {
+      "type": "text",
+      "value": "21",
+      "x": 7,
+      "y": 12,
+      "size": 50,
+      "font": "Roboto-Bold",
+      "color": "red",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "Montag",
+      "x": 82,
+      "y": 16,
+      "size": 22,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "September 2026",
+      "x": 82,
+      "y": 44,
+      "size": 17,
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "rectangle",
+      "x_start": 470,
+      "y_start": 18,
+      "x_end": 484,
+      "y_end": 31,
+      "fill": "black",
+      "outline": null
+    },
+    {
+      "type": "text",
+      "value": "Termin",
+      "x": 493,
+      "y": 16,
+      "size": 15,
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "rectangle",
+      "x_start": 640,
+      "y_start": 18,
+      "x_end": 654,
+      "y_end": 31,
+      "fill": "red",
+      "outline": null
+    },
+    {
+      "type": "text",
+      "value": "Familie",
+      "x": 663,
+      "y": 16,
+      "size": 15,
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "icon",
+      "value": "mdi:cake-variant",
+      "x": 469,
+      "y": 41,
+      "size": 17,
+      "color": "red"
+    },
+    {
+      "type": "text",
+      "value": "Geburtstag",
+      "x": 493,
+      "y": 42,
+      "size": 15,
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "rectangle",
+      "x_start": 640,
+      "y_start": 44,
+      "x_end": 654,
+      "y_end": 57,
+      "fill": "yellow",
+      "outline": "black"
+    },
+    {
+      "type": "text",
+      "value": "Abfuhr",
+      "x": 663,
+      "y": 42,
+      "size": 15,
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "line",
+      "x_start": 0,
+      "y_start": 76,
+      "x_end": 800,
+      "y_end": 76,
+      "fill": "black",
+      "width": 2
+    },
+    {
+      "type": "rectangle",
+      "x_start": 0,
+      "y_start": 78,
+      "x_end": 200,
+      "y_end": 112,
+      "fill": "red",
+      "outline": null
+    },
+    {
+      "type": "text",
+      "value": "HEUTE",
+      "x": 7,
+      "y": 86,
+      "size": 20,
+      "font": "Roboto-Bold",
+      "color": "white",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "Di",
+      "x": 250,
+      "y": 86,
+      "size": 20,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "ma"
+    },
+    {
+      "type": "text",
+      "value": "Mi",
+      "x": 350,
+      "y": 86,
+      "size": 20,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "ma"
+    },
+    {
+      "type": "text",
+      "value": "Do",
+      "x": 450,
+      "y": 86,
+      "size": 20,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "ma"
+    },
+    {
+      "type": "text",
+      "value": "Fr",
+      "x": 550,
+      "y": 86,
+      "size": 20,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "ma"
+    },
+    {
+      "type": "rectangle",
+      "x_start": 600,
+      "y_start": 78,
+      "x_end": 700,
+      "y_end": 112,
+      "fill": "yellow",
+      "outline": null
+    },
+    {
+      "type": "text",
+      "value": "Sa",
+      "x": 650,
+      "y": 86,
+      "size": 20,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "ma"
+    },
+    {
+      "type": "rectangle",
+      "x_start": 700,
+      "y_start": 78,
+      "x_end": 800,
+      "y_end": 112,
+      "fill": "yellow",
+      "outline": null
+    },
+    {
+      "type": "text",
+      "value": "So",
+      "x": 750,
+      "y": 86,
+      "size": 20,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "ma"
+    },
+    {
+      "type": "line",
+      "x_start": 0,
+      "y_start": 112,
+      "x_end": 800,
+      "y_end": 112,
+      "fill": "black",
+      "width": 1
+    },
+    {
+      "type": "line",
+      "x_start": 200,
+      "y_start": 78,
+      "x_end": 200,
+      "y_end": 480,
+      "fill": "black",
+      "width": 1
+    },
+    {
+      "type": "line",
+      "x_start": 300,
+      "y_start": 78,
+      "x_end": 300,
+      "y_end": 480,
+      "fill": "black",
+      "width": 1
+    },
+    {
+      "type": "line",
+      "x_start": 400,
+      "y_start": 78,
+      "x_end": 400,
+      "y_end": 480,
+      "fill": "black",
+      "width": 1
+    },
+    {
+      "type": "line",
+      "x_start": 500,
+      "y_start": 78,
+      "x_end": 500,
+      "y_end": 480,
+      "fill": "black",
+      "width": 1
+    },
+    {
+      "type": "line",
+      "x_start": 600,
+      "y_start": 78,
+      "x_end": 600,
+      "y_end": 480,
+      "fill": "black",
+      "width": 1
+    },
+    {
+      "type": "line",
+      "x_start": 700,
+      "y_start": 78,
+      "x_end": 700,
+      "y_end": 480,
+      "fill": "black",
+      "width": 1
+    },
+    {
+      "type": "text",
+      "value": "08:30  Zahnarzt Müller",
+      "x": 7,
+      "y": 120,
+      "size": 16,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 188,
+      "truncate": true
+    },
+    {
+      "type": "rectangle",
+      "x_start": 3,
+      "y_start": 144,
+      "x_end": 197,
+      "y_end": 165,
+      "fill": "yellow",
+      "outline": null,
+      "radius": 2
+    },
+    {
+      "type": "text",
+      "value": "Restmüll rausstellen",
+      "x": 7,
+      "y": 146,
+      "size": 16,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 188,
+      "truncate": true
+    },
+    {
+      "type": "rectangle",
+      "x_start": 3,
+      "y_start": 172,
+      "x_end": 6,
+      "y_end": 188,
+      "fill": "red",
+      "outline": null
+    },
+    {
+      "type": "text",
+      "value": "17:15  Training Lena",
+      "x": 12,
+      "y": 172,
+      "size": 16,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 183,
+      "truncate": true
+    },
+    {
+      "type": "rectangle",
+      "x_start": 3,
+      "y_start": 198,
+      "x_end": 6,
+      "y_end": 214,
+      "fill": "red",
+      "outline": null
+    },
+    {
+      "type": "text",
+      "value": "19:30  Kino mit Papa",
+      "x": 12,
+      "y": 198,
+      "size": 16,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 183,
+      "truncate": true
+    },
+    {
+      "type": "icon",
+      "value": "mdi:cake-variant",
+      "x": 7,
+      "y": 224,
+      "size": 16,
+      "color": "red"
+    },
+    {
+      "type": "text",
+      "value": "Oma Grünschnitt wird 79",
+      "x": 27,
+      "y": 224,
+      "size": 16,
+      "color": "red",
+      "anchor": "la",
+      "max_width": 168,
+      "truncate": true
+    },
+    {
+      "type": "text",
+      "value": "09:00  Standup",
+      "x": 207,
+      "y": 120,
+      "size": 13,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 88,
+      "truncate": true
+    },
+    {
+      "type": "rectangle",
+      "x_start": 203,
+      "y_start": 140,
+      "x_end": 206,
+      "y_end": 153,
+      "fill": "red",
+      "outline": null
+    },
+    {
+      "type": "text",
+      "value": "16:00  Elternabend Klasse 3b",
+      "x": 212,
+      "y": 140,
+      "size": 13,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 83,
+      "truncate": true
+    },
+    {
+      "type": "text",
+      "value": "Papa wird 62",
+      "x": 307,
+      "y": 120,
+      "size": 13,
+      "color": "red",
+      "anchor": "la",
+      "max_width": 88,
+      "truncate": true
+    },
+    {
+      "type": "text",
+      "value": "14:00  Physio",
+      "x": 307,
+      "y": 140,
+      "size": 13,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 88,
+      "truncate": true
+    },
+    {
+      "type": "rectangle",
+      "x_start": 403,
+      "y_start": 118,
+      "x_end": 497,
+      "y_end": 136,
+      "fill": "yellow",
+      "outline": null,
+      "radius": 2
+    },
+    {
+      "type": "text",
+      "value": "Gelber Sack",
+      "x": 407,
+      "y": 120,
+      "size": 13,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 88,
+      "truncate": true
+    },
+    {
+      "type": "text",
+      "value": "18:00  Chor",
+      "x": 407,
+      "y": 140,
+      "size": 13,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 88,
+      "truncate": true
+    },
+    {
+      "type": "text",
+      "value": "10:00  Werkstatt Termin",
+      "x": 507,
+      "y": 120,
+      "size": 13,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 88,
+      "truncate": true
+    },
+    {
+      "type": "rectangle",
+      "x_start": 603,
+      "y_start": 120,
+      "x_end": 606,
+      "y_end": 133,
+      "fill": "red",
+      "outline": null
+    },
+    {
+      "type": "text",
+      "value": "09:00  Brunch bei Oma",
+      "x": 612,
+      "y": 120,
+      "size": 13,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 83,
+      "truncate": true
+    },
+    {
+      "type": "rectangle",
+      "x_start": 603,
+      "y_start": 138,
+      "x_end": 697,
+      "y_end": 156,
+      "fill": "yellow",
+      "outline": null,
+      "radius": 2
+    },
+    {
+      "type": "text",
+      "value": "Biotonne",
+      "x": 607,
+      "y": 140,
+      "size": 13,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 88,
+      "truncate": true
+    },
+    {
+      "type": "text",
+      "value": "Lena wird 9",
+      "x": 707,
+      "y": 120,
+      "size": 13,
+      "color": "red",
+      "anchor": "la",
+      "max_width": 88,
+      "truncate": true
+    }
+  ]
+}

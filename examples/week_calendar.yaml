@@ -1,0 +1,270 @@
+# Wochenkalender fuer ein 800x480 ESL (BLE-750BWRY)
+#
+# Zwei Teile:
+#   chrome  - das feste Geruest. Genau das, was der ESPHome Designer
+#             exportiert, also dort bearbeitbar und hier eingefuegt.
+#   payload - das Datumsband, die Wochentage und die Termine, aus den
+#             Kalendern erzeugt.
+#
+# Anpassen: die vier Kalender-Entitaeten unten im Template, und device_id.
+
+alias: ESL Wochenkalender
+mode: single
+sequence:
+  - action: calendar.get_events
+    target:
+      entity_id:
+        - calendar.mein_kalender
+        - calendar.familienkalender
+        - calendar.geburtstage
+        - calendar.muellkalender
+    data:
+      start_date_time: "{{ today_at() }}"
+      duration:
+        days: 7
+    response_variable: agenda
+
+  - variables:
+      chrome:
+        - type: rectangle
+          x_start: 0
+          y_start: 0
+          x_end: 800
+          y_end: 4
+          fill: red
+          outline: null
+        - type: line
+          x_start: 0
+          y_start: 76
+          x_end: 800
+          y_end: 76
+          fill: black
+          width: 2
+        - type: rectangle
+          x_start: 0
+          y_start: 78
+          x_end: 200
+          y_end: 112
+          fill: red
+          outline: null
+        - type: text
+          value: HEUTE
+          x: 7
+          y: 86
+          size: 20
+          font: Roboto-Bold
+          color: white
+          anchor: la
+        - type: line
+          x_start: 0
+          y_start: 112
+          x_end: 800
+          y_end: 112
+          fill: black
+          width: 1
+        - type: line
+          x_start: 200
+          y_start: 78
+          x_end: 200
+          y_end: 480
+          fill: black
+          width: 1
+        - type: line
+          x_start: 300
+          y_start: 78
+          x_end: 300
+          y_end: 480
+          fill: black
+          width: 1
+        - type: line
+          x_start: 400
+          y_start: 78
+          x_end: 400
+          y_end: 480
+          fill: black
+          width: 1
+        - type: line
+          x_start: 500
+          y_start: 78
+          x_end: 500
+          y_end: 480
+          fill: black
+          width: 1
+        - type: line
+          x_start: 600
+          y_start: 78
+          x_end: 600
+          y_end: 480
+          fill: black
+          width: 1
+        - type: line
+          x_start: 700
+          y_start: 78
+          x_end: 700
+          y_end: 480
+          fill: black
+          width: 1
+        - type: rectangle
+          x_start: 470
+          y_start: 18
+          x_end: 484
+          y_end: 31
+          fill: black
+          outline: null
+        - type: text
+          value: Termin
+          x: 493
+          y: 16
+          size: 15
+          color: black
+          anchor: la
+        - type: rectangle
+          x_start: 640
+          y_start: 18
+          x_end: 654
+          y_end: 31
+          fill: red
+          outline: null
+        - type: text
+          value: Familie
+          x: 663
+          y: 16
+          size: 15
+          color: black
+          anchor: la
+        - type: icon
+          value: mdi:cake-variant
+          x: 469
+          y: 41
+          size: 17
+          color: red
+        - type: text
+          value: Geburtstag
+          x: 493
+          y: 42
+          size: 15
+          color: black
+          anchor: la
+        - type: rectangle
+          x_start: 640
+          y_start: 44
+          x_end: 654
+          y_end: 57
+          fill: yellow
+          outline: black
+        - type: text
+          value: Abfuhr
+          x: 663
+          y: 42
+          size: 15
+          color: black
+          anchor: la
+
+  - action: esl_zhsunyco.drawcustom
+    data:
+      device_id: DEINE_GERAETE_ID
+      background: white
+      # Kein Antialiasing und kein Dithering: jedes Pixel sitzt, wie es soll.
+      antialias: false
+      dither: false
+      payload: >-
+        {% set kalender = {
+             'calendar.mein_kalender':    'mine',
+             'calendar.familienkalender': 'family',
+             'calendar.geburtstage':      'birthday',
+             'calendar.muellkalender':    'waste' } %}
+        {% set stil = {
+             'mine':     {'color': 'black'},
+             'family':   {'color': 'black', 'bar': 'red'},
+             'birthday': {'color': 'red',   'icon': 'mdi:cake-variant'},
+             'waste':    {'color': 'black', 'chip': 'yellow'} } %}
+        {% set spalte = [0, 200, 300, 400, 500, 600, 700, 800] %}
+        {% set kurz = ['Mo','Di','Mi','Do','Fr','Sa','So'] %}
+        {% set lang = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'] %}
+        {% set monat = ['Januar','Februar','März','April','Mai','Juni','Juli',
+                        'August','September','Oktober','November','Dezember'] %}
+        {% set heute = today_at() %}
+        {% set ns = namespace(tage=[], termine=[], out=[]) %}
+
+        {%- for i in range(7) %}
+          {%- set ns.tage = ns.tage + [(heute + timedelta(days=i)).strftime('%Y-%m-%d')] %}
+        {%- endfor %}
+
+        {#- Datumsband oben links -#}
+        {%- set ns.out = ns.out + [
+              {'type':'text','value': heute.day|string,'x':7,'y':12,'size':50,
+               'font':'Roboto-Bold','color':'red','anchor':'la'},
+              {'type':'text','value': lang[heute.weekday()],'x':82,'y':16,'size':22,
+               'font':'Roboto-Bold','color':'black','anchor':'la'},
+              {'type':'text','value': monat[heute.month - 1] ~ ' ' ~ heute.year,
+               'x':82,'y':44,'size':17,'color':'black','anchor':'la'} ] %}
+
+        {#- Wochentage der sechs Folgetage, Wochenende gelb -#}
+        {%- for i in range(1, 7) %}
+          {%- set tag = heute + timedelta(days=i) %}
+          {%- set x0 = spalte[i] %}{% set x1 = spalte[i + 1] %}
+          {%- if tag.weekday() >= 5 %}
+            {%- set ns.out = ns.out + [{'type':'rectangle','x_start':x0,'y_start':78,
+                'x_end':x1,'y_end':112,'fill':'yellow','outline':none}] %}
+          {%- endif %}
+          {%- set ns.out = ns.out + [{'type':'text','value': kurz[tag.weekday()],
+              'x':(x0 + x1) // 2,'y':86,'size':20,'font':'Roboto-Bold',
+              'color':'black','anchor':'ma'}] %}
+        {%- endfor %}
+
+        {#- Termine einsammeln: [Spalte, Sortierschlüssel, Text, Art] -#}
+        {%- for entity, art in kalender.items() %}
+          {%- for e in agenda.get(entity, {}).get('events', []) %}
+            {%- set datum = e.start[:10] %}
+            {%- if datum in ns.tage %}
+              {%- set zeit = e.start[11:16] ~ '  ' if 'T' in e.start else '' %}
+              {%- set ns.termine = ns.termine + [[ns.tage.index(datum), e.start,
+                    zeit ~ e.summary, art]] %}
+            {%- endif %}
+          {%- endfor %}
+        {%- endfor %}
+
+        {#- Spalte für Spalte setzen -#}
+        {%- for sp in range(7) %}
+          {%- set des_tages = ns.termine | selectattr('0','eq',sp) | sort(attribute='1') | list %}
+          {%- set gross = 16 if sp == 0 else 13 %}
+          {%- set schritt = 26 if sp == 0 else 20 %}
+          {%- set x0 = spalte[sp] %}{% set x1 = spalte[sp + 1] %}
+          {%- for e in des_tages[:16] %}
+            {%- set y = 120 + loop.index0 * schritt %}
+            {%- set s = stil[e[3]] %}
+            {%- set tx = namespace(x = x0 + 7) %}
+            {%- if s.get('chip') %}
+              {%- set ns.out = ns.out + [{'type':'rectangle','x_start':x0 + 3,
+                  'y_start':y - 2,'x_end':x1 - 3,'y_end':y + gross + 3,
+                  'fill':s.chip,'outline':none,'radius':2}] %}
+            {%- endif %}
+            {%- if s.get('bar') %}
+              {%- set ns.out = ns.out + [{'type':'rectangle','x_start':x0 + 3,'y_start':y,
+                  'x_end':x0 + 6,'y_end':y + gross,'fill':s.bar,'outline':none}] %}
+              {%- set tx.x = x0 + 12 %}
+            {%- endif %}
+            {%- if s.get('icon') and sp == 0 %}
+              {%- set ns.out = ns.out + [{'type':'icon','value':s.icon,'x':x0 + 7,'y':y,
+                  'size':gross,'color':s.color}] %}
+              {%- set tx.x = x0 + 11 + gross %}
+            {%- endif %}
+            {%- set ns.out = ns.out + [{'type':'text','value': e[2],'x':tx.x,'y':y,
+                'size':gross,'color':s.color,'anchor':'la',
+                'max_width': x1 - tx.x - 5,'truncate': true}] %}
+          {%- endfor %}
+        {%- endfor %}
+
+        {{ (chrome + ns.out) | to_json }}
+    response_variable: ergebnis
+
+  - if:
+      - condition: template
+        value_template: "{{ not ergebnis.results[0].ok }}"
+    then:
+      - action: persistent_notification.create
+        data:
+          title: ESL Kalender
+          message: >-
+            Uebertragung fehlgeschlagen:
+            {{ ergebnis.results[0].detail }}
