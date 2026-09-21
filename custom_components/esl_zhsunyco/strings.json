@@ -253,6 +253,32 @@
           "description": "Apply Floyd-Steinberg dithering."
         }
       }
+    },
+    "drawcustom": {
+      "name": "Draw custom layout",
+      "description": "Draws an OpenEPaperLink style layout - the format the ESPHome Designer exports - and sends the result to the panel.",
+      "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "The ESL to send this to."
+        },
+        "payload": {
+          "name": "Payload",
+          "description": "The list of drawing elements, or the whole exported data block. Accepts a list, an object with a payload key, or JSON text."
+        },
+        "background": {
+          "name": "Background",
+          "description": "Colour to start the canvas with: black, white, red, yellow or #rrggbb. Defaults to the payload's own setting, else white."
+        },
+        "rotate": {
+          "name": "Rotation",
+          "description": "Turn the finished layout by this many degrees. The layout is drawn on a canvas that matches, so a 90 degree design uses the panel's long edge as its width."
+        },
+        "dither": {
+          "name": "Dither",
+          "description": "Apply Floyd-Steinberg dithering when reducing to the panel palette. This is what turns the half_black and half_red colours into a pattern."
+        }
+      }
     }
   },
   "selector": {

@@ -30,6 +30,7 @@ command is always the slow one — see
 | | |
 |---|---|
 | Send a picture | from a file or a URL, any size, any colours |
+| Draw a layout | text, shapes, icons and QR codes from an automation |
 | Send a test pattern | built in, no image file needed |
 | Clear the screen | one button or one service call |
 | See what the panel shows | an `image` entity, kept across restarts |
@@ -266,6 +267,61 @@ one configured — check the model in the integration options.
 Other patterns: `solid_black`, `solid_white`, `solid_red`, `solid_yellow`,
 `stripes_h`, `stripes_v`, `checkerboard`, `quadrants`.
 
+## Drawing a layout instead of sending a file
+
+`drawcustom` describes what the panel should show — text, boxes, icons, a QR
+code — and the integration draws it at panel resolution and sends it. No
+image file, no rendering service, no second machine involved.
+
+```yaml
+action: esl_zhsunyco.drawcustom
+data:
+  device_id: <your label>
+  payload:
+    - type: rectangle
+      x_start: 0
+      y_start: 0
+      x_end: 100%
+      y_end: 34
+      fill: red
+    - type: text
+      value: Geburtstage
+      x: 6
+      y: 6
+      size: 22
+      color: white
+    - type: text
+      value: "{{ states('sensor.naechster_geburtstag') }}"
+      x: 6
+      y: 48
+      size: 18
+```
+
+The element format is the one OpenEPaperLink uses, which is what the
+**ESPHome Designer** exports under *Home Assistant Service Call (JSON)*.
+Design the screen there, export it, change the service name to
+`esl_zhsunyco.drawcustom`, and put your `device_id` in place of the
+`target`. The rest of the exported block goes through unchanged.
+
+Fifteen element types are supported — text, multiline, line, rectangle,
+rectangle_pattern, polygon, circle, ellipse, arc, progress_bar, icon,
+icon_sequence, qrcode, dlimg and debug_grid — with percentages as
+coordinates, automatic stacking when `y` is left out, and the full Material
+Design Icons set bundled so icons work offline.
+
+**[docs/drawcustom.md](docs/drawcustom.md) is the full reference**: every
+element, every property, every colour name.
+
+A mistake in the payload is refused with the element named, before the label
+is woken up:
+
+```
+element 3 (text): needs 'value'
+```
+
+`plot` is the one OpenEPaperLink element not supported: it draws from Home
+Assistant's recorder history, which this integration does not read.
+
 ## Did the send work?
 
 There are **two** different failures, and they feel different:
@@ -276,8 +332,9 @@ There are **two** different failures, and they feel different:
 | The transfer was accepted and the panel did nothing | **No error at all** — only `label_reacted: false` |
 
 The second is the treacherous one: Home Assistant reports success while the
-label still shows the old picture. So `set_image`, `send_test_pattern`,
-`clear_screen`, `set_rgb` and `debug_command` return a result:
+label still shows the old picture. So `set_image`, `drawcustom`,
+`send_test_pattern`, `clear_screen`, `set_rgb` and `debug_command` return a
+result:
 
 ```yaml
 action: esl_zhsunyco.set_image
@@ -419,6 +476,7 @@ data:
 | Service | What it does |
 |---|---|
 | `set_image` | Send a picture from a file or a URL |
+| `drawcustom` | Draw a layout from a list of elements |
 | `send_test_pattern` | Send a built-in pattern |
 | `clear_screen` | Clear the panel |
 | `set_rgb` | Drive the RGB LED |
@@ -607,3 +665,8 @@ git tag v0.25.0 && git push origin v0.25.0
 ## Licence
 
 MIT — see [LICENSE](LICENSE).
+
+The bundled icon font in `custom_components/esl_zhsunyco/assets` is
+[Material Design Icons](https://github.com/Templarian/MaterialDesign-Webfont),
+Apache 2.0; see the NOTICE file next to it. `scripts/fetch_mdi_assets.py`
+regenerates both files from that project.

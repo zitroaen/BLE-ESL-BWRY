@@ -28,6 +28,7 @@ SCHEMAS = {
     "debug_probe": svc.DEBUG_PROBE_SCHEMA,
     "debug_command": svc.DEBUG_COMMAND_SCHEMA,
     "send_test_pattern": svc.SEND_TEST_PATTERN_SCHEMA,
+    "drawcustom": svc.DRAWCUSTOM_SCHEMA,
 }
 
 

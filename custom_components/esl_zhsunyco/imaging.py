@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from io import BytesIO
+from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,6 +45,13 @@ class ImageRequest:
     path: str | None = None
     data: bytes | None = None
     pattern: str | None = None
+    # A drawcustom element list, drawn at panel size instead of loaded from
+    # a file. Its own options (background, rotate) travel in payload_options
+    # because they are named in the payload's own vocabulary, and anything a
+    # dlimg element needs is downloaded before this ever reaches an executor.
+    payload: list[dict[str, Any]] | None = None
+    payload_options: dict[str, Any] = field(default_factory=dict)
+    resources: dict[str, bytes] = field(default_factory=dict)
     pixel_format: str = "mono"
     rotate: int = 0
     mirror: bool = False
@@ -59,6 +67,19 @@ class ImageRequest:
 def _open_source(request: ImageRequest, width: int, height: int):
     """Load the source image and flatten transparency onto the background."""
     from PIL import Image
+
+    if request.payload is not None:
+        from .drawcustom import render_payload
+
+        options = request.payload_options
+        return render_payload(
+            request.payload,
+            width,
+            height,
+            background=options.get("background", "white"),
+            rotate=options.get("rotate", 0),
+            resources=request.resources,
+        )
 
     if request.pattern is not None:
         from . import patterns

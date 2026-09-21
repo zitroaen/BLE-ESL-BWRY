@@ -160,3 +160,39 @@ send_test_pattern:
       default: true
       selector:
         boolean:
+
+drawcustom:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            - integration: esl_zhsunyco
+    payload:
+      required: true
+      example: |
+        - type: text
+          value: Hello
+          x: 10
+          y: 10
+          size: 24
+          color: red
+      selector:
+        object:
+    background:
+      required: false
+      example: white
+      selector:
+        text:
+    rotate:
+      required: false
+      example: "0"
+      selector:
+        select:
+          options: ["0", "90", "180", "270"]
+    dither:
+      required: false
+      example: true
+      selector:
+        boolean:

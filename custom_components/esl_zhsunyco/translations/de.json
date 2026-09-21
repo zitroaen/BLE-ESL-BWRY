@@ -253,6 +253,32 @@
           "description": "Floyd-Steinberg-Dithering anwenden."
         }
       }
+    },
+    "drawcustom": {
+      "name": "Eigenes Layout zeichnen",
+      "description": "Zeichnet ein Layout im OpenEPaperLink-Format - das, was der ESPHome Designer exportiert - und sendet das Ergebnis an das Display.",
+      "fields": {
+        "device_id": {
+          "name": "Label",
+          "description": "Das ESL, an das gesendet wird."
+        },
+        "payload": {
+          "name": "Payload",
+          "description": "Die Liste der Zeichenelemente oder der komplette exportierte Datenblock. Erlaubt sind eine Liste, ein Objekt mit einem payload-Schlüssel oder JSON-Text."
+        },
+        "background": {
+          "name": "Hintergrund",
+          "description": "Farbe, mit der die Fläche beginnt: black, white, red, yellow oder #rrggbb. Standard ist die Angabe im Payload, sonst weiß."
+        },
+        "rotate": {
+          "name": "Drehung",
+          "description": "Dreht das fertige Layout um so viele Grad. Gezeichnet wird auf einer passenden Fläche, ein um 90 Grad gedrehtes Layout nutzt also die lange Kante des Displays als Breite."
+        },
+        "dither": {
+          "name": "Dithering",
+          "description": "Floyd-Steinberg-Dithering beim Reduzieren auf die Displayfarben. Damit werden half_black und half_red zu einem Muster."
+        }
+      }
     }
   },
   "selector": {

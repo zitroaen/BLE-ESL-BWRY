@@ -1,0 +1,17 @@
+materialdesignicons-webfont.ttf and mdi-codepoints.json
+-------------------------------------------------------
+
+Material Design Icons, version 7.4.47, from
+
+    https://github.com/Templarian/MaterialDesign-Webfont
+
+Licensed under the Apache License, Version 2.0:
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+The font file is unmodified. mdi-codepoints.json is generated from that
+project's scss/_variables.scss by scripts/fetch_mdi_assets.py; it holds
+nothing but the icon names and the glyph positions they live at, which is
+what lets an "icon" element in a payload be written as "mdi:battery-50".
+
+Both files are bundled so that drawing an icon never needs the network.
