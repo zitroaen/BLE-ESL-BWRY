@@ -270,6 +270,27 @@ def _outcome(device: ESLDevice, record: dict) -> dict:
     }
 
 
+def _unknown_device(hass: HomeAssistant, registry, given: str) -> str:
+    """Explain a device id that is not one, and hand over the right one.
+
+    Putting the device's name where its id belongs is the natural
+    mistake: the name is what every screen in Home Assistant shows, and
+    the id is a hex string that appears nowhere unless you go looking.
+    So when the name matches one of our labels, say so and give both
+    ways to fix it rather than repeating the name back.
+    """
+    for entry_id in hass.data.get(DOMAIN, {}):
+        for device in dr.async_entries_for_config_entry(registry, entry_id):
+            if given in (device.name, device.name_by_user):
+                template = "{{ device_id('" + given + "') }}"
+                return (
+                    f"{given!r} is the label's name, not its device id. "
+                    f"Use device_id: {device.id} - or let Home Assistant "
+                    f'look it up: device_id: "{template}"'
+                )
+    return f"Unknown device id {given}"
+
+
 def _resolve_devices(hass: HomeAssistant, call: ServiceCall) -> list[ESLDevice]:
     """Map the service target onto our device objects."""
     registry = dr.async_get(hass)
@@ -278,7 +299,7 @@ def _resolve_devices(hass: HomeAssistant, call: ServiceCall) -> list[ESLDevice]:
     for device_id in call.data[ATTR_DEVICE_ID]:
         entry_device = registry.async_get(device_id)
         if entry_device is None:
-            raise ServiceValidationError(f"Unknown device id {device_id}")
+            raise ServiceValidationError(_unknown_device(hass, registry, device_id))
 
         for entry_id in entry_device.config_entries:
             device = hass.data.get(DOMAIN, {}).get(entry_id)

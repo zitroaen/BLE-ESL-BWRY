@@ -605,6 +605,26 @@ unable to hold a link. Three causes, in the order worth trying:
 The error message names how many connectable scanners exist and which one
 heard the label last, which separates the first case from the third.
 
+### "Unknown device id"
+
+`device_id` wants the device's registry id, a long hex string — not the
+name the device page shows. The name is the natural thing to paste, so
+the error names the right id when it recognises what you typed.
+
+Two ways out:
+
+```yaml
+# Look it up once: Settings → Devices, open the label, and the id is the
+# last part of the URL.
+device_id: 9f2c1e7a4b6d8e0f1a2b3c4d5e6f7a8b
+
+# Or let Home Assistant do it, using the name as it appears on that page.
+device_id: "{{ device_id('ESL 66:66:00:00:00:00') }}"
+```
+
+The second survives a rename only if you update the name in it too, but
+it saves the lookup and reads better in a script.
+
 ### Two ESL integrations at once
 
 A label accepts only **one** connection at a time. If a second integration

@@ -88,7 +88,10 @@ sequence:
 
   - action: esl_zhsunyco.drawcustom
     data:
-      device_id: DEINE_GERAETE_ID
+      # Die Geraete-ID, nicht der Name. device_id() schlaegt sie am
+      # Namen nach, wie er in den Geraeteeinstellungen steht - dann
+      # muss man den Hex-String nirgends heraussuchen.
+      device_id: "{{ device_id('ESL 66:66:00:00:00:00') }}"
       background: white
       # Keine Kantenglaettung, kein Dithering: jedes Pixel sitzt.
       antialias: false
