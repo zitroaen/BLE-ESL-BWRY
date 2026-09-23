@@ -52,6 +52,7 @@ jobs:
           python-version: "3.13"
       - run: pip install -r requirements-test.txt
       - run: python scripts/check_services.py
+      - run: python scripts/check_links.py
       - run: python tests/test_protocol.py
       - run: python tests/test_diagnostics.py
       - run: python tests/test_imaging.py

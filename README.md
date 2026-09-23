@@ -3,29 +3,23 @@
 [![Validate](https://github.com/zitroaen/BLE-ESL-BWRY/actions/workflows/validate.yml/badge.svg)](https://github.com/zitroaen/BLE-ESL-BWRY/actions/workflows/validate.yml)
 [![hacs](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 
-Put pictures on a battery-powered BLE e-ink shelf label from Home
-Assistant — a calendar, a dashboard, a name plate — and drive its LED.
+Put pictures on a battery-powered BLE e-ink shelf label — a calendar, a
+dashboard, a name plate — and drive its LED. Works with labels running
+Wolink / Zhsunyco firmware in all ten sizes the vendor sells, 1.54" to
+7.5", over a local adapter or an ESPHome Bluetooth proxy.
 
-Works with labels running Wolink / Zhsunyco firmware, in all ten sizes the
-vendor sells — 1.54" to 7.5", four colour or black and white. See
-[Panel size](#panel-size). Local Bluetooth adapters and ESPHome Bluetooth
-proxies are both supported.
+## Install
 
-**This is the user manual.** The interface itself is specified separately in
-[`docs/protocol.md`](docs/protocol.md), and the measurements behind it are in
-[`docs/hardware-verified-findings.md`](docs/hardware-verified-findings.md).
+HACS → ⋮ → **Custom repositories** → `https://github.com/zitroaen/BLE-ESL-BWRY`,
+category *Integration* → download → restart. The label is then usually
+discovered on its own; otherwise add it by address, which always starts
+with `66:66`.
 
-## Quick start
+Press the **Test pattern** button on the device page to check it. The
+first command after a label has been idle takes minutes — that is the
+label's advertising interval, not a fault.
 
-1. Install through HACS as a custom repository, restart, add the integration
-2. Wait for the label to be discovered, or add it by address
-3. Press the **Test pattern** button on the device page
-
-If the panel redraws within a few minutes, everything works. The first
-command is always the slow one — see
-[Why the first command takes minutes](#why-the-first-command-takes-minutes).
-
-## What you can do
+## What it does
 
 | | |
 |---|---|
@@ -35,58 +29,43 @@ command is always the slow one — see
 | Clear the screen | one button or one service call |
 | See what the panel shows | an `image` entity, kept across restarts |
 | Drive the RGB LED | colour, blink rate, duration |
-| Read battery and status | without connecting, from the advertisement |
-| Watch the charge level | in percent, for a low-battery automation |
-| Send a picture in seconds | uploads are compressed, typically to about 5 % |
+| Read battery and status | from the advertisement, without connecting |
 
-Not supported: firmware updates over the air, and storing several images in
-the label to switch between.
+Sends are compressed, typically to about 5 % — and a picture the panel is
+already showing is not sent at all, so an automation can run as often as
+it likes. Not supported: firmware updates, and storing several images in
+the label.
 
-## Installation
+## Services
 
-1. In Home Assistant: **HACS → ⋮ → Custom repositories**
-2. Repository `https://github.com/zitroaen/BLE-ESL-BWRY`, category **Integration**
-3. Add it, then download **Zhsunyco ESL**
-4. Restart Home Assistant
-5. **Settings → Devices & services → Add integration → Zhsunyco ESL**
+| Service | |
+|---|---|
+| `set_image` | send a picture from a file or a URL |
+| `drawcustom` | draw a layout from a list of elements |
+| `send_test_pattern` | send a built-in pattern |
+| `clear_screen` · `set_rgb` | clear the panel, drive the LED |
+| `debug_probe` · `debug_command` | for an unfamiliar label |
 
-Updates then arrive through HACS as usual.
+All of them return a result, so an automation can tell an accepted
+command from one the label ignored.
 
-### Manually
+```yaml
+action: esl_zhsunyco.drawcustom
+data:
+  device_id: <your label>
+  antialias: false
+  dither: false
+  payload:
+    - type: text
+      value: Hello
+      x: 10
+      y: 10
+      size: 40
+      color: red
+```
 
-Copy `custom_components/esl_zhsunyco/` into `<config>/custom_components/`
-and restart Home Assistant.
-
-### Upgrading from the pre-HACS prototype
-
-A config entry created by the earlier prototype (titled like
-`ESL 66:66:17:40:27:77 (BLE-35BWRY)`) is **migrated automatically** on the
-first start. The address, the model and the old `battery_scan_interval` are
-carried over. There is no need to delete and re-add the device.
-
-## Setup
-
-Labels are usually **discovered automatically**. To add one by hand you need
-its address, which always starts with `66:66` — for example
-`66:66:54:20:00:55`.
-
-Two options are worth knowing about:
-
-**Scan interval** only controls the connection-based poll for status and
-version. Battery and version numbers arrive passively without a connection,
-so a long interval is fine. `0` disables the poll entirely.
-
-**Panel model** sets the size pictures are rendered at. If yours is not in
-the list, or the list has it wrong, **Panel width / height / colour depth**
-override it — see [Panel size](#panel-size) below.
-
-**Battery voltage when full / when empty** set the range the percentage is
-interpolated between — see [Battery level](#battery-level) below.
-
-**Linger** is how long the connection stays open after a command, 15 seconds
-by default. Commands inside that window are instant. Longer is not better: a
-connected label stops advertising, so while the link is held nothing can see
-the label — not even Home Assistant.
+The element format is OpenEPaperLink's, which is what the ESPHome
+Designer exports — a design pastes across unchanged.
 
 ## Entities
 
@@ -101,687 +80,36 @@ the label — not even Home Assistant.
 | Clear screen, test pattern, diagnostic probe | Button | one press each |
 | Signal strength, display version, product ID | Sensor | diagnostic, off by default |
 
-## Panel size
+## Documentation
 
-These labels are sold in ten sizes and the label never reports which one it
-is, so the size has to be configured. All ten are built in:
-
-| Model | Screen | Vendor resolution | Colours |
-|---|---|---|---|
-| `BLE-154MBWRY` | 1.54" | 200 × 200 | four |
-| `BLE-213BWRY` | 2.13" | 250 × 128 | four |
-| `BLE-213MBW-L` | 2.13" | 250 × 128 | black and white |
-| `BLE-266BWRY` | 2.66" | 296 × 152 | four |
-| `BLE-290BWRY` | 2.9" | 296 × 128 | four |
-| `BLE-350BWRY` | 3.5" | 384 × 184 | four |
-| `BLE-370BWRY` | 3.7" | 416 × 240 | four |
-| `BLE-420BWRY` | 4.2" | 400 × 300 | four |
-| `BLE-583BWRY` | 5.83" | 648 × 480 | four |
-| `BLE-750BWRY` | 7.5" | 800 × 480 | four |
-
-If yours is not listed, or a preset turns out wrong, **panel width, height
-and colour depth are options in their own right** — leave width and height
-at `0` to take them from the model. All of it can be changed after setup,
-so picking the wrong model does not mean deleting and re-adding the label.
-
-### One caveat worth reading
-
-The resolutions above are the vendor's. **The orientation the data is sent
-in is not always the same as the way the resolution is printed**, and that
-is not documented anywhere:
-
-| Model | Vendor prints | Pixels per row on the wire | |
-|---|---|---|---|
-| 3.5" | 384 × 184 | **184** | measured here |
-| 2.9" | 296 × 128 | **128** | reported |
-| 7.5" | 800 × 480 | **800** | measured here |
-
-So the two smaller panels send their *short* axis as a row and the large
-one its long axis. For the models where nobody has checked, the preset
-follows the nearest known case — transposed up to 3.5", as printed from
-3.7" up. That is an interpolation between three data points, not a rule —
-but its upper end is confirmed: the 7.5" panel draws correctly at 800 × 480
-with no swap.
-
-Getting it wrong shears the picture diagonally and does nothing worse.
-**The fix is to swap width and height in the options.** Send the
-`diagnostic` test pattern first and it shows up immediately.
-
-### If the picture comes out wrong
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| Diagonal shearing, smeared gratings | Width is the wrong axis | Swap width and height |
-| Only part of the panel is drawn | Wrong height | Correct the height |
-| Speckled where it should be flat | Dithering | `dither: false` |
-| Mirrored or rotated | The panel's scan origin | `mirror` / `rotate` on `set_image` |
-
-The last row is worth expecting on the 2.9" panel: the implementation this
-data partly comes from applies a mirror and a 90° rotation to it, which
-suggests its origin differs from the 3.5" one. Nothing is applied
-automatically here, because it has not been verified.
-
-## Battery level
-
-The label reports a **voltage**, not a percentage — the protocol has no
-percentage in it anywhere. The `Battery` sensor derives one by interpolating
-linearly between two configurable voltages, so it carries Home Assistant's
-battery device class and works in a low-battery automation:
-
-```yaml
-triggers:
-  - trigger: numeric_state
-    entity_id: sensor.esl_66_66_17_40_27_77_battery
-    below: 20
-```
-
-The defaults are **3000 mV full** and **2200 mV empty**, which suit the 3 V
-lithium coin cell these labels ship with. A measured unit read 2947 mV,
-which comes out as 93 %.
-
-Two things worth knowing before you trust the number:
-
-- **It is an estimate, not a measurement.** If you know your cell, set the
-  two voltages in the integration options. The `Battery voltage` sensor
-  keeps showing what the label actually reports.
-- **The reading will sit high for a long time and then fall quickly.** That
-  is how lithium coin cells behave — nearly flat voltage for most of their
-  life, then a cliff. A straight line between two voltages cannot represent
-  that, and a curve invented without knowing the cell would just be a guess
-  with more decimal places. Treat a falling reading as urgent.
-
-## Sending a picture
-
-`set_image` takes either a local `path` or a `url`.
-
-For a local file, Home Assistant only allows directories you have opened up,
-so add this to `configuration.yaml` once:
-
-```yaml
-homeassistant:
-  allowlist_external_dirs:
-    - /config/www/esl
-```
-
-```yaml
-action: esl_zhsunyco.set_image
-data:
-  device_id: <your label>
-  path: /config/www/esl/calendar.png
-  dither: true
-```
-
-A URL needs no allowlist:
-
-```yaml
-action: esl_zhsunyco.set_image
-data:
-  device_id: <your label>
-  url: https://example.com/calendar.png
-```
-
-Only `http` and `https` are accepted, the download times out after 30
-seconds, and anything over 8 MB is refused. A source that turns out not to
-be a usable image says so, naming the URL.
-
-You do not have to prepare the picture. It is fitted to the panel, dithered
-onto the four colours the hardware can display, packed and compressed for
-upload.
-
-**Compression is on by default and matters more than it sounds.** A full
-3.5" screen is 17664 bytes raw; compressed, real images came out at 830 to
-1100 bytes — around 5 %. Since the label has to be awake and connected for
-the whole transfer, and a connected label is invisible to everything else,
-a shorter upload is the single biggest improvement available here. It
-turns roughly half a minute of transfer into a couple of seconds.
-
-If a panel refuses compressed uploads, **Compress images** in the options
-turns it off. Images that would grow under compression — a photo dithered
-into noise, say — are sent uncompressed automatically.
-
-For graphics with large flat areas — text, tables, a calendar — set
-`dither: false`. Dithering speckles solid colour, which looks worse than it
-sounds on a small panel.
-
-Options: `rotate` (0/90/180/270), `mirror`, `invert`, `dither`.
-
-### Test patterns
-
-```yaml
-action: esl_zhsunyco.send_test_pattern
-data:
-  device_id: <your label>
-  pattern: diagnostic
-```
-
-The `diagnostic` pattern is built to be read off a photograph, which makes
-it the right first thing to send to a new label:
-
-| What you see | What it tells you |
+| | |
 |---|---|
-| Frame closed all the way round | The whole panel is being addressed |
-| Blocks in the order black, red, yellow, white | Colours are mapped correctly |
-| Both one-pixel gratings sharp, no smearing | The pixel packing is correct |
-
-If the gratings smear or the frame is cut off, the panel is probably not the
-one configured — check the model in the integration options.
-
-Other patterns: `solid_black`, `solid_white`, `solid_red`, `solid_yellow`,
-`stripes_h`, `stripes_v`, `checkerboard`, `quadrants`.
-
-## Drawing a layout instead of sending a file
-
-`drawcustom` describes what the panel should show — text, boxes, icons, a QR
-code — and the integration draws it at panel resolution and sends it. No
-image file, no rendering service, no second machine involved.
-
-```yaml
-action: esl_zhsunyco.drawcustom
-data:
-  device_id: <your label>
-  payload:
-    - type: rectangle
-      x_start: 0
-      y_start: 0
-      x_end: 100%
-      y_end: 34
-      fill: red
-    - type: text
-      value: Geburtstage
-      x: 6
-      y: 6
-      size: 22
-      color: white
-    - type: text
-      value: "{{ states('sensor.naechster_geburtstag') }}"
-      x: 6
-      y: 48
-      size: 18
-```
-
-The element format is the one OpenEPaperLink uses, which is what the
-**ESPHome Designer** exports in *OpenEpaperLink* mode. Design the screen
-there, copy the JSON, and hand the whole copied block over as `payload` —
-the `target` and the service name in it are ignored, and `background`,
-`rotate` and `dither` are read out of it. Nothing has to be edited by hand.
-
-Careful with **which** export: the Designer's project file (the one with
-`pages` and `widgets`) describes a device for a firmware build, not a
-drawing, and is refused with a message saying so.
-
-Fifteen element types are supported — text, multiline, line, rectangle,
-rectangle_pattern, polygon, circle, ellipse, arc, progress_bar, icon,
-icon_sequence, qrcode, dlimg and debug_grid — with percentages as
-coordinates, automatic stacking when `y` is left out, and the full Material
-Design Icons set bundled so icons work offline.
-
-**[docs/drawcustom.md](docs/drawcustom.md) is the full reference**: every
-element, every property, every colour name.
-**[examples/](examples/)** has a complete week calendar — four calendars
-on one 800 × 480 panel, colour coded, with the script that keeps it
-current.
-
-For a screen made mostly of text, turn off both smoothing steps:
-
-```yaml
-data:
-  antialias: false   # every glyph pixel fully on or off
-  dither: false      # no speckle in flat colour
-```
-
-Text is drawn in Roboto, bundled with the integration, so umlauts and
-accents come out as letters rather than as empty boxes.
-
-A mistake in the payload is refused with the element named, before the label
-is woken up:
-
-```
-element 3 (text): needs 'value'
-```
-
-`plot` is the one OpenEPaperLink element not supported: it draws from Home
-Assistant's recorder history, which this integration does not read.
-
-### The same picture is not sent twice
-
-A transfer is the expensive half of all this: the label has to stay
-connected for it, which makes it invisible to every Bluetooth scanner
-meanwhile, and it ends in a full colour refresh. Arriving at the picture
-that is already on the panel is pure cost.
-
-So a send that would change nothing is skipped. Rendering still happens —
-it takes about a tenth of a second — and the result comes back with
-`sent: false`:
-
-```yaml
-results:
-  - address: 66:66:...
-    ok: true
-    sent: false
-    detail: the panel is already showing this image
-```
-
-That is what lets an automation run as often as it likes:
-
-```yaml
-triggers:
-  - trigger: time_pattern
-    minutes: "/15"
-actions:
-  - action: script.my_calendar
-```
-
-Two things follow from it:
-
-- **Keep a clock off the panel.** A line that shows the time changes every
-  minute, so every render differs and every run transfers. Put the
-  freshness in Home Assistant instead — the `image` entity carries the
-  time of the last actual send.
-- **`force: true`** sends regardless, for when the panel was cleared from
-  somewhere else or a battery came out. Clearing the screen through this
-  integration already does it for you: the next send goes out, because a
-  blank panel is a difference.
-
-## Did the send work?
-
-There are **two** different failures, and they feel different:
-
-| Case | How you notice |
-|---|---|
-| The transfer failed (label asleep, connection dropped) | The service raises, the automation stops |
-| The transfer was accepted and the panel did nothing | **No error at all** — only `label_reacted: false` |
-
-The second is the treacherous one: Home Assistant reports success while the
-label still shows the old picture. So `set_image`, `drawcustom`,
-`send_test_pattern`, `clear_screen`, `set_rgb` and `debug_command` return a
-result:
-
-```yaml
-action: esl_zhsunyco.set_image
-data:
-  device_id: <your label>
-  path: /config/www/esl/calendar.png
-response_variable: result
-```
-
-```yaml
-results:
-  - address: "66:66:17:40:27:77"
-    ok: true              # the write itself went through
-    label_reacted: true   # the panel reported busy, so it really drew
-    connection_dropped: false
-    error_code: 0
-    bytes: 17664          # the image
-    sent_bytes: 891       # what actually went over the air
-    compressed: true
-    at: "2026-09-06T19:12:04.881+00:00"
-```
-
-**`label_reacted` is the check that matters.** `ok: true` only says the
-bytes went out.
-
-The response is optional, so automations written without
-`response_variable` keep working unchanged.
-
-### An automation that retries
-
-A sleeping label is the normal case, not the exception. Three attempts with
-a real pause between them is realistic:
-
-```yaml
-- repeat:
-    count: 3
-    sequence:
-      # Reset it: after a raised error the variable would otherwise still
-      # hold the result of the previous iteration.
-      - variables:
-          result: null
-      - action: esl_zhsunyco.set_image
-        data:
-          device_id: <your label>
-          path: /config/www/esl/calendar.png
-        response_variable: result
-        continue_on_error: true
-      - if:
-          - condition: template
-            value_template: "{{ result and result.results[0].label_reacted }}"
-        then:
-          - stop: "The picture is on the panel"
-      - delay: "00:05:00"
-- action: persistent_notification.create
-  data:
-    title: ESL
-    message: The calendar image did not get through after three attempts.
-```
-
-Both oddities in there are load-bearing. `continue_on_error: true` keeps a
-connection failure from ending the loop instead of driving it, and the
-`variables:` reset is not cosmetic: without it `result` keeps its last
-successful value after a raised error and the loop stops early, believing it
-succeeded.
-
-Be generous with the delay. The integration already waits up to five minutes
-for the label to appear, and a quick second attempt only competes with the
-first one for the single connection slot.
-
-### Without a response variable
-
-The `image` entity's state **is** the timestamp of the last successful
-upload, which is enough to trigger on:
-
-```yaml
-triggers:
-  - trigger: state
-    entity_id: image.esl_66_66_17_40_27_77_panel
-```
-
-And to ask whether anything landed today:
-
-```yaml
-{{ states('image.esl_66_66_17_40_27_77_panel') | as_datetime | as_local
-   > today_at('00:00') }}
-```
-
-## What the panel is showing
-
-Every label has an `image` entity holding the last picture that was
-uploaded. It is built from the pixels that were actually sent, so dithering
-and colour reduction show up in it exactly as they do on the panel.
-
-```yaml
-type: picture-entity
-entity: image.esl_66_66_17_40_27_77_panel
-```
-
-It **survives a restart**. An e-ink panel holds its image without power, so
-as long as nothing else writes to the label it is still showing exactly
-that. The picture is stored per label in `.storage`, which costs about 1 kB
-for flat graphics and text and around 14 kB for a fully dithered
-photograph.
-
-It is updated **only after a successful transfer**:
-
-- If the send fails, the previous preview stays — which is also what the
-  panel is still showing.
-- **Clearing the screen discards it.** The panel is no longer showing the
-  image, and restoring it after a restart would be a picture of a blank
-  screen.
-- Removing the label from Home Assistant deletes the stored copy.
-
-It also stays **available** while the label sleeps: what is on the panel
-does not stop being true because nobody can see it right now.
-
-This assumes **only** this integration writes to the label. If something
-else does, the preview will be stale.
-
-## Other services
-
-```yaml
-# Blink the LED red for 30 seconds
-action: esl_zhsunyco.set_rgb
-data:
-  device_id: <your label>
-  rgb_color: [255, 0, 0]
-  on_ms: 500
-  off_ms: 500
-  work_ms: 30000
-```
-
-```yaml
-action: esl_zhsunyco.clear_screen
-data:
-  device_id: <your label>
-```
-
-| Service | What it does |
-|---|---|
-| `set_image` | Send a picture from a file or a URL |
-| `drawcustom` | Draw a layout from a list of elements |
-| `send_test_pattern` | Send a built-in pattern |
-| `clear_screen` | Clear the panel |
-| `set_rgb` | Drive the RGB LED |
-| `debug_probe` | Connect and dump the whole GATT table |
-| `debug_command` | Write raw bytes to the command characteristic |
-
-The last two are for diagnosing an unfamiliar label; see
-[`docs/protocol.md`](docs/protocol.md) if you need them.
-
-## Troubleshooting
-
-### Start with the diagnostic probe
-
-The fastest way to narrow anything down: press the **Diagnostic probe**
-button on the device page, or call `esl_zhsunyco.debug_probe`. It connects,
-lists everything the label offers, tries the unlock and reads the raw
-values. The result arrives as a notification and in the log.
-
-It works even when every other entity is unavailable — it does not fail, it
-reports why under `connection_error`.
-
-Two fields say the most:
-
-- `connection` — `ok` means the connection works.
-- `reads.status.error_meaning` — `unlock_failed` means the label rejected
-  authentication; anything else means that part worked.
-
-### A command failed and the message is one word
-
-`Timeout` or `Unknown error` on their own used to be all you got: Home
-Assistant shows whatever the service raised, and several failures here
-carry no text. Since 0.29.2 a failure names the label, the step and the
-elapsed time, for example:
-
-```
-66:66:17:40:27:77: send_image (891 bytes) failed while writing the command
-after 34s - TimeoutError: no detail
-```
-
-The step is the useful part:
-
-| Step | What was happening |
-|---|---|
-| `connecting` | Waiting for the label to advertise, then opening the link |
-| `reading the status` | Connected, reading the status byte before the command |
-| `writing the command` | The command or the image chunks going out |
-| `watching for the refresh` | Waiting for the panel to report busy and finish |
-
-The same fields are in the diagnostics download under `last_command`, as
-`phase` and `elapsed_s`.
-
-**Settings → Devices & services → Zhsunyco ESL → Download diagnostics**
-gives you a JSON file with everything the integration knows, including
-`last_command` — what the last command did, and whether the panel reacted —
-and `version_bytes`, the raw version field the label reports.
-The download does not open a connection; use the probe button for that.
-
-### Why the first command takes minutes
-
-An ESL sleeps between advertisements, and gaps of several minutes are
-normal. A label can only be connected to while it is briefly awake, so the
-integration waits for that window — up to five minutes — and connects
-inside it.
-
-**The first button press taking a long time is normal, not a fault.**
-Afterwards the connection stays open for 15 seconds, so follow-up commands
-are instant.
-
-In the log this shows up as:
-
-```
-BleakOutOfConnectionSlotsError: ... no scanner currently has it in its
-discovered devices ... last advertisement 262s ago
-```
-
-If it never succeeds, the adapter or proxy is too far away or has no free
-connection slots. Another
-[ESPHome Bluetooth proxy](https://esphome.github.io/bluetooth-proxies/)
-near the label is the fix.
-
-### It advertises, but nothing can connect to it
-
-The device page shows a recent advertisement and every command still fails
-with something like:
-
-```
-send_image (1042 bytes) failed while connecting after 252s -
-BleakNotFoundError: Failed to connect after 7 attempt(s): Timeout waiting
-for connect response
-```
-
-That is not a contradiction. **Advertisements carry considerably further
-than a connection does** — a label can be perfectly audible and still be
-unable to hold a link. Three causes, in the order worth trying:
-
-1. **The proxy has no free connection slot.** An ESPHome proxy handles
-   three connections at once by default. Restart the proxy; if it is busy
-   with other devices, put a second one near the label.
-2. **The label is stuck.** E-ink firmware can hang, particularly after an
-   upload that was cut short. Take the battery out for a few seconds. This
-   costs nothing and fixes it more often than it should.
-3. **It is too far for a reliable link.** Look at the RSSI the error
-   message quotes. Below roughly −80 dBm, advertisements still arrive and
-   connections mostly do not.
-
-The error message names how many connectable scanners exist and which one
-heard the label last, which separates the first case from the third.
-
-### Umlauts come out as empty boxes
-
-Text is drawn in Roboto, which ships with the integration. If that file
-is not there, drawing falls back to Pillow's own font, which covers ASCII
-and nothing else — so `Müller` comes out as `M□ller`, silently, because a
-missing glyph is not an error.
-
-Check the log (Settings → System → Logs, filter `esl_zhsunyco`) for:
-
-```
-Roboto-Regular.ttf is missing, falling back to the built in font
-```
-
-Download diagnostics from the device page also lists every bundled file
-under `assets` with its size, or `MISSING`.
-
-The fix is to redownload the integration in HACS and restart Home
-Assistant — an update that skipped the font files is the usual cause.
-
-### An element ends up at the top of the panel
-
-A bare `y` is a special case in YAML: `y: 198` can be read as `true: 198`,
-which loses the position while `x` survives. The element then stacks under
-whatever came before it, usually landing near the top edge.
-
-The integration puts such a key back and logs a warning, but the way to
-avoid it is to quote the key in any payload written as YAML:
-
-```yaml
-- type: text
-  value: HEUTE
-  x: 48
-  "y": 198
-```
-
-### "Unknown device id"
-
-`device_id` wants the device's registry id, a long hex string — not the
-name the device page shows. The name is the natural thing to paste, so
-the error names the right id when it recognises what you typed.
-
-Two ways out:
-
-```yaml
-# Look it up once: Settings → Devices, open the label, and the id is the
-# last part of the URL.
-device_id: 9f2c1e7a4b6d8e0f1a2b3c4d5e6f7a8b
-
-# Or let Home Assistant do it, using the name as it appears on that page.
-device_id: "{{ device_id('ESL 66:66:00:00:00:00') }}"
-```
-
-The second survives a rename only if you update the name in it too, but
-it saves the lookup and reads better in a script.
-
-### Two ESL integrations at once
-
-A label accepts only **one** connection at a time. If a second integration
-talks to the same label, the two take turns and commands go missing. Disable
-the other one for this label as a test.
-
-### The LED or clear screen does nothing
-
-1. **Check `unlock_verified` in the diagnostics.** If it is `false` the
-   label rejected authentication and ignores every command by definition.
-2. **Read `last_command` in the diagnostics.** `label_reacted: false` means
-   the panel never became busy after the command, so it did not act on it.
-3. **Check the model** in the integration options. On a model other than the
-   BLE-35BWRY the command encoding has never been measured.
-
-### All entities show as unavailable
-
-The label has not been heard from for a while — it is out of range, or
-something else is holding a connection to it (see above). The `bluetooth`
-section of the diagnostics download separates the cases:
-
-| Field | Meaning |
-|---|---|
-| `last_service_info_any: null` | Home Assistant cannot see the label at all |
-| `last_service_info_any` set but entities empty | It is seen, but not reaching this integration |
-| `scanners_seeing_this_label: []` | No adapter or proxy is receiving it |
-| `learned_advertising_interval_s` | How often Home Assistant sees it transmit |
-
-Reloading the integration (⋮ → Reload) is a safe first step.
-
-### Enable debug logging
-
-```yaml
-logger:
-  default: warning
-  logs:
-    custom_components.esl_zhsunyco: debug
-```
-
-**"not in range of any Bluetooth adapter or proxy":** Home Assistant cannot
-see the label right now. ESPHome proxies need `bluetooth_proxy: active:
-true`, otherwise only passive advertisements are possible.
-
-**Status reports `unlock_failed`:** the label rejected authentication. Check
-whether it really runs this firmware family — `protocol_family` in the probe
-output says which one it speaks. If it says `easytag_xor`, this integration
-is the wrong software for that label; see
-[`docs/protocol.md`](docs/protocol.md) for the other family.
+| [docs/setup.md](docs/setup.md) | installing by hand, and every option explained |
+| [docs/services.md](docs/services.md) | every service, what it returns, retrying |
+| [docs/drawcustom.md](docs/drawcustom.md) | the drawing elements and their properties |
+| [docs/panels.md](docs/panels.md) | sizes, the orientation caveat, battery calibration |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | when something does not work |
+| [examples/](examples/) | a week calendar, complete, with the script behind it |
+| [docs/protocol.md](docs/protocol.md) | the interface itself, with what is measured and what is guessed |
+| [docs/hardware-verified-findings.md](docs/hardware-verified-findings.md) | the measurements behind it |
 
 ## Development
 
 ```bash
 pip install -r requirements-test.txt ruff
-
 ruff check custom_components tests scripts
 ruff format --check custom_components
-
-python scripts/check_services.py   # services.yaml + translations, hassfest rules
+python scripts/check_services.py   # services.yaml + translations
+python scripts/check_links.py      # every link between the docs
 python tests/test_protocol.py      # protocol, no Home Assistant needed
 pytest tests/integration -q        # against a real Home Assistant
 ```
 
-There are two levels of test. `tests/test_protocol.py`, `test_imaging.py`
-and `test_diagnostics.py` check the generated wire bytes against
-[`docs/protocol.md`](docs/protocol.md); they need no Home Assistant, because
-`protocol.py` and `imaging.py` contain no HA imports and can be driven
-against real hardware from a plain script. `tests/integration/` starts a
-real Home Assistant and covers the config flow, entities, services and
-advertisement handling.
-
-To publish a release, push a git tag matching the `version` in
-`manifest.json`:
-
-```bash
-git tag v0.25.0 && git push origin v0.25.0
-```
+`protocol.py` and `imaging.py` hold no Home Assistant imports, so the wire
+bytes can be checked — and driven against real hardware — from a plain
+script. A release is a git tag matching `version` in `manifest.json`.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
-
-The bundled icon font in `custom_components/esl_zhsunyco/assets` is
-[Material Design Icons](https://github.com/Templarian/MaterialDesign-Webfont),
-Apache 2.0; see the NOTICE file next to it. `scripts/fetch_mdi_assets.py`
-regenerates both files from that project.
+MIT — see [LICENSE](LICENSE). The bundled fonts are Apache 2.0; see
+[the NOTICE](custom_components/esl_zhsunyco/assets/NOTICE) beside them.

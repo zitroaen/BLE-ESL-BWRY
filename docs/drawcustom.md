@@ -62,8 +62,8 @@ which is where an export puts them. A value given in the service call wins
 over the one in the payload.
 
 The service supports a response variable, exactly like `set_image`, so an
-automation can tell whether the send worked. See **Did the send work?** in
-the README.
+automation can tell whether the send worked. See
+[services.md](services.md).
 
 ### Pasting an export
 

@@ -41,8 +41,7 @@ with this script as the target, or the Run button in the script editor.
    send costs battery and hides the label from Bluetooth while it uploads.
 
 The script reports a failed transfer as a persistent notification, using
-the response the service returns. See **Did the send work?** in the README
-for what else is in there.
+the response the service returns. See [docs/services.md](../docs/services.md) for what else is in there.
 
 ### How it is put together
 
@@ -105,8 +104,8 @@ Every fifteen minutes, and once when Home Assistant starts. That is the
 whole automation.
 
 It can be that blunt because the integration skips a transfer that would
-change nothing — see **The same picture is not sent twice** in the main
-README. Drawing costs a tenth of a second; sending costs battery and
+change nothing — see **The same picture is not sent twice** in
+[../docs/services.md](../docs/services.md). Drawing costs a tenth of a second; sending costs battery and
 hides the label from Bluetooth, and only happens when the picture really
 differs. A moved appointment, a new entry, the date rolling over: all of
 them reach the panel within a quarter of an hour, and a quiet day sends
@@ -170,5 +169,4 @@ back into the script's `chrome:` block.
 
 Both files render at exactly 800 × 480 with whole-number coordinates and
 `antialias: false`, so every glyph lands on the pixel grid. That is what
-keeps small text readable on a four colour panel — see **Crisp text** in
-[../docs/drawcustom.md](../docs/drawcustom.md).
+keeps small text readable on a four colour panel — see **Crisp text** in [../docs/drawcustom.md](../docs/drawcustom.md).
