@@ -342,6 +342,46 @@ element 3 (text): needs 'value'
 `plot` is the one OpenEPaperLink element not supported: it draws from Home
 Assistant's recorder history, which this integration does not read.
 
+### The same picture is not sent twice
+
+A transfer is the expensive half of all this: the label has to stay
+connected for it, which makes it invisible to every Bluetooth scanner
+meanwhile, and it ends in a full colour refresh. Arriving at the picture
+that is already on the panel is pure cost.
+
+So a send that would change nothing is skipped. Rendering still happens —
+it takes about a tenth of a second — and the result comes back with
+`sent: false`:
+
+```yaml
+results:
+  - address: 66:66:...
+    ok: true
+    sent: false
+    detail: the panel is already showing this image
+```
+
+That is what lets an automation run as often as it likes:
+
+```yaml
+triggers:
+  - trigger: time_pattern
+    minutes: "/15"
+actions:
+  - action: script.my_calendar
+```
+
+Two things follow from it:
+
+- **Keep a clock off the panel.** A line that shows the time changes every
+  minute, so every render differs and every run transfers. Put the
+  freshness in Home Assistant instead — the `image` entity carries the
+  time of the last actual send.
+- **`force: true`** sends regardless, for when the panel was cleared from
+  somewhere else or a battery came out. Clearing the screen through this
+  integration already does it for you: the next send goes out, because a
+  blank panel is a difference.
+
 ## Did the send work?
 
 There are **two** different failures, and they feel different:

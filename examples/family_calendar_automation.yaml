@@ -1,79 +1,30 @@
 # Wann der Kalender ans ESL geht.
 #
-# Zwei Ausloeser:
-#   - taeglich um 00:02, weil sich das Datum geaendert hat
-#   - sobald sich an den Terminen etwas aendert
+# Einfach alle 15 Minuten, plus einmal beim Start von Home Assistant.
+# Das deckt alles ab: den Tageswechsel, einen verschobenen Termin, einen
+# neuen Eintrag, eine korrigierte Abfuhr.
 #
-# Fuer den zweiten gibt es in Home Assistant kein Ereignis: ein Kalender
-# meldet nicht, dass jemand einen Termin verschoben hat. Also fragt ein
-# Sensor die Termine regelmaessig ab und macht daraus eine Pruefsumme.
-# Aendert die sich, war etwas anders - und nur dann wird gesendet. Das
-# ist der Punkt: jede Uebertragung kostet Akku und macht das Label
-# waehrenddessen fuer Bluetooth unsichtbar, blindes Senden alle 15
-# Minuten waere Verschwendung.
+# Das geht nur deshalb, weil die Integration eine Uebertragung
+# ueberspringt, die nichts aendern wuerde: gezeichnet wird jedes Mal,
+# gesendet nur, wenn das Bild sich vom zuletzt gesendeten unterscheidet.
+# Zeichnen kostet 100 ms, Senden kostet Akku und macht das Label
+# waehrenddessen fuer Bluetooth unsichtbar.
 #
-# Der Sensor gehoert in die configuration.yaml, die Automatisierung in
-# die Automatisierungen.
+# Darum darf das Skript auch keine "aktualisiert HH:MM"-Zeile zeichnen -
+# die waere jede Minute anders und wuerde jedes Mal eine Uebertragung
+# ausloesen.
+#
+# Soll ein Bild in jedem Fall raus, etwa nach einem Batteriewechsel:
+# force: true an der drawcustom-Aktion.
 
-# --- configuration.yaml ---------------------------------------------
-template:
-  - triggers:
-      - trigger: time_pattern
-        minutes: "/15"
-      - trigger: homeassistant
-        event: start
-    actions:
-      # Genau die Zeitraeume, die auch auf dem Schirm landen: eine Woche
-      # Familie, 60 Tage Abfuhr. Ein Familientermin in drei Wochen
-      # aendert das Bild nicht und soll es also auch nicht neu senden.
-      - action: calendar.get_events
-        target:
-          entity_id: calendar.familie
-        data:
-          start_date_time: "{{ today_at() }}"
-          duration:
-            days: 7
-        response_variable: familie
-      - action: calendar.get_events
-        target:
-          entity_id: calendar.abfallkalender
-        data:
-          start_date_time: "{{ today_at() }}"
-          duration:
-            days: 60
-        response_variable: abfall
-    sensor:
-      - name: ESL Kalenderstand
-        unique_id: esl_kalenderstand
-        icon: mdi:calendar-sync
-        state: >-
-          {%- set ns = namespace(t='') %}
-          {%- for e in familie['calendar.familie'].events %}
-            {%- set ns.t = ns.t ~ e.start ~ e.end ~ e.summary %}
-          {%- endfor %}
-          {%- for e in abfall['calendar.abfallkalender'].events %}
-            {%- set ns.t = ns.t ~ e.start ~ e.summary %}
-          {%- endfor %}
-          {{- ns.t | md5 }}
-
-# --- Automatisierung -------------------------------------------------
 alias: Kalender an ESL senden
-description: Taeglich nach Mitternacht, und wenn sich Termine aendern.
+description: Zeichnet alle 15 Minuten; gesendet wird nur, was anders ist.
 triggers:
-  - trigger: time
-    at: "00:02:00"
-    id: taeglich
-  - trigger: state
-    entity_id: sensor.esl_kalenderstand
-    id: geaendert
-conditions:
-  # Beim Neustart und beim Neuladen geht der Sensor kurz auf unknown.
-  # Das ist keine Aenderung an den Terminen, also auch keine Sendung
-  # wert - der Weg zurueck auf eine Pruefsumme ist eine.
-  - condition: template
-    value_template: >-
-      {{ trigger.id == 'taeglich'
-         or trigger.to_state.state not in ['unknown', 'unavailable'] }}
+  - trigger: time_pattern
+    minutes: "/15"
+  - trigger: homeassistant
+    event: start
+conditions: []
 actions:
   - action: script.esl_familienkalender
 mode: single

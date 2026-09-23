@@ -193,6 +193,10 @@
         "url": {
           "name": "URL",
           "description": "Image to download and send. Give either this or a path."
+        },
+        "force": {
+          "name": "Send anyway",
+          "description": "Send even when the panel already shows exactly this picture. Off by default: an unchanged picture is not worth the transfer."
         }
       }
     },
@@ -251,6 +255,10 @@
         "dither": {
           "name": "Dither",
           "description": "Apply Floyd-Steinberg dithering."
+        },
+        "force": {
+          "name": "Send anyway",
+          "description": "Send even when the panel already shows exactly this picture. Off by default: an unchanged picture is not worth the transfer."
         }
       }
     },
@@ -281,6 +289,10 @@
         "antialias": {
           "name": "Antialiasing",
           "description": "Smooth the edges of text and icons. Off draws every glyph pixel fully on or off, which is sharper on a four colour panel."
+        },
+        "force": {
+          "name": "Send anyway",
+          "description": "Send even when the panel already shows exactly this picture. Off by default: an unchanged picture is not worth the transfer."
         }
       }
     }

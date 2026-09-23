@@ -101,19 +101,19 @@ when one bin is fortnightly and another monthly; a week would show two.
 
 ## `family_calendar_automation.yaml` — when to send it
 
-Daily just after midnight, because the date changed, and whenever the
-entries change.
+Every fifteen minutes, and once when Home Assistant starts. That is the
+whole automation.
 
-There is no event for the second one: a calendar does not announce that
-somebody moved an appointment. So a template sensor polls both calendars
-every fifteen minutes and hashes what it finds; the automation fires when
-that hash changes. Sending only on a real change is the point, because
-every transfer costs battery and hides the label from Bluetooth while it
-runs — sending blindly every fifteen minutes would be waste.
+It can be that blunt because the integration skips a transfer that would
+change nothing — see **The same picture is not sent twice** in the main
+README. Drawing costs a tenth of a second; sending costs battery and
+hides the label from Bluetooth, and only happens when the picture really
+differs. A moved appointment, a new entry, the date rolling over: all of
+them reach the panel within a quarter of an hour, and a quiet day sends
+nothing at all.
 
-The sensor polls exactly the windows the screen draws, seven days and
-sixty. A family entry three weeks out changes nothing visible, so it must
-not trigger a send; a test checks the two stay in step.
+Which is also why the screen carries no clock. A ticking minute would
+differ from the last render every time, and every run would transfer.
 
 ## `calendar_modern_layout.json` — the layout on its own
 

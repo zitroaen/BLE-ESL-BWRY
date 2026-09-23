@@ -11,6 +11,12 @@
 #
 # WICHTIG: als Skript ausfuehren, nicht als einzelne Aktion. Die Termine
 # entstehen in den beiden Schritten davor.
+#
+# Bewusst keine "aktualisiert HH:MM"-Zeile: die aendert sich jede Minute,
+# und dann waere nie ein Bild identisch mit dem vorigen. Die Integration
+# ueberspringt eine Uebertragung, die nichts aendern wuerde - deshalb darf
+# dieses Skript so oft laufen, wie man will. Wann zuletzt wirklich
+# gesendet wurde, steht an der image-Entitaet des Labels.
 
 alias: ESL Familienkalender
 mode: single
@@ -275,10 +281,6 @@ sequence:
                 {'type':'text','value':a[1],'x':x + 22,'y':419,'size':16,
                  'color':tinte,'anchor':'la','max_width':CHIP_W - 40,'truncate':true} ] %}
         {%- endfor %}
-
-        {%- set ns.out = ns.out + [{'type':'text',
-              'value':'aktualisiert ' ~ now().strftime('%H:%M'),'x':R,'y':458,
-              'size':13,'color':'black','anchor':'ra'}] %}
 
         {{ (chrome + ns.out) | to_json }}
     response_variable: ergebnis

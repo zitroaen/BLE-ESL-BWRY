@@ -87,6 +87,11 @@ set_image:
       default: true
       selector:
         boolean:
+    force:
+      required: false
+      default: false
+      selector:
+        boolean:
 
 debug_probe:
   fields:
@@ -160,6 +165,11 @@ send_test_pattern:
       default: true
       selector:
         boolean:
+    force:
+      required: false
+      default: false
+      selector:
+        boolean:
 
 drawcustom:
   fields:
@@ -199,5 +209,10 @@ drawcustom:
     antialias:
       required: false
       example: false
+      selector:
+        boolean:
+    force:
+      required: false
+      default: false
       selector:
         boolean:

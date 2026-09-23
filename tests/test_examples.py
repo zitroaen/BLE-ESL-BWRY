@@ -322,34 +322,27 @@ def test_the_examples_quote_the_y_key() -> None:
         assert "\n          y: " not in text, f"{name} has an unquoted y key"
 
 
-def test_the_automation_watches_what_the_script_draws() -> None:
-    """The change detector and the drawing must cover the same ground.
-
-    If the sensor polled a different window than the script draws, it
-    would either miss a change or send on one that cannot be seen.
-    """
-    # One file, two halves: the sensor belongs in configuration.yaml and
-    # the automation in the automations, so it is a snippet, not a paste.
+def test_the_automation_just_runs_the_script_on_a_timer() -> None:
+    """Running often is only harmless because a repeat is not sent."""
     document = yaml.safe_load(
         (EXAMPLES / "family_calendar_automation.yaml").read_text("utf-8")
     )
-
-    polls = document["template"][0]["actions"]
-    windows = {
-        poll["target"]["entity_id"]: poll["data"]["duration"]["days"] for poll in polls
-    }
-    assert windows == {"calendar.familie": 7, "calendar.abfallkalender": 60}
-
-    script = yaml.safe_load((EXAMPLES / "family_calendar.yaml").read_text("utf-8"))
-    drawn = {
-        step["target"]["entity_id"]: step["data"]["duration"]["days"]
-        for step in script["sequence"]
-        if step.get("action") == "calendar.get_events"
-    }
-    assert windows == drawn, "the sensor and the script disagree on the window"
-
     assert document["actions"][0]["action"] == "script.esl_familienkalender"
     assert document["mode"] == "single"
+    assert {trigger["trigger"] for trigger in document["triggers"]} == {
+        "time_pattern",
+        "homeassistant",
+    }
+
+
+def test_the_calendar_screen_holds_no_clock() -> None:
+    """A minute that ticks would make every render differ from the last.
+
+    Which would send a full transfer every time the automation runs, and
+    take the skip away entirely.
+    """
+    text = (EXAMPLES / "family_calendar.yaml").read_text("utf-8")
+    assert "%H:%M" not in text, "a clock on the screen defeats the unchanged check"
 
 
 def test_the_designer_layout_still_draws() -> None:

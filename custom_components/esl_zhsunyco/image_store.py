@@ -34,6 +34,7 @@ STORAGE_VERSION = 1
 _KEY_PNG = "png_base64"
 _KEY_AT = "at"
 _KEY_SOURCE = "source"
+_KEY_DIGEST = "payload_sha"
 
 
 class PanelImageStore:
@@ -45,7 +46,7 @@ class PanelImageStore:
             hass, STORAGE_VERSION, f"{DOMAIN}.{entry_id}.panel"
         )
 
-    async def async_load(self) -> tuple[bytes, datetime, str | None] | None:
+    async def async_load(self) -> tuple[bytes, datetime, str | None, str | None] | None:
         """Return the stored image, or None if there is nothing usable.
 
         Never raises. A store that cannot be read is a reason to show no
@@ -71,15 +72,23 @@ class PanelImageStore:
             _LOGGER.warning("Stored panel image is incomplete, ignoring it")
             return None
 
-        return png, at, data.get(_KEY_SOURCE)
+        return png, at, data.get(_KEY_SOURCE), data.get(_KEY_DIGEST)
 
-    async def async_save(self, png: bytes, at: datetime, source: str | None) -> None:
-        """Write the image that is now on the panel."""
+    async def async_save(
+        self, png: bytes, at: datetime, source: str | None, digest: str | None = None
+    ) -> None:
+        """Write the image that is now on the panel.
+
+        The digest is of the bytes that went over the air, not of the
+        preview, so a later send can tell whether the panel would end up
+        showing anything different.
+        """
         await self._store.async_save(
             {
                 _KEY_PNG: base64.b64encode(png).decode("ascii"),
                 _KEY_AT: at.isoformat(),
                 _KEY_SOURCE: source,
+                _KEY_DIGEST: digest,
             }
         )
 

@@ -80,6 +80,12 @@ DEBUG_COMMAND_SCHEMA = _DEVICE_SELECTOR.extend(
 
 # Shared knobs. The pixel format itself is settled and no longer adjustable;
 # what is left is how the source picture should be fitted onto the panel.
+# Sending is the expensive half: the label is invisible to Bluetooth for
+# the whole transfer and a colour refresh costs battery. So a picture that
+# matches what the panel already shows is skipped, and this is how a
+# caller says it wants the transfer regardless.
+_FORCE_FIELD = {vol.Optional("force", default=False): cv.boolean}
+
 _ENCODING_FIELDS = {
     vol.Optional("rotate", default=0): vol.All(
         vol.Coerce(int), vol.In([0, 90, 180, 270])
@@ -122,6 +128,7 @@ SET_IMAGE_SCHEMA = vol.All(
             vol.Optional("path"): cv.string,
             vol.Optional("url"): vol.All(cv.string, cv.url),
             **_ENCODING_FIELDS,
+            **_FORCE_FIELD,
         }
     ),
     _exactly_one_source,
@@ -131,6 +138,7 @@ SEND_TEST_PATTERN_SCHEMA = _DEVICE_SELECTOR.extend(
     {
         vol.Optional("pattern", default=DEFAULT_PATTERN): vol.In(PATTERNS),
         **_ENCODING_FIELDS,
+        **_FORCE_FIELD,
     }
 )
 
@@ -170,6 +178,7 @@ DRAWCUSTOM_SCHEMA = vol.All(
             vol.Optional("rotate"): vol.All(vol.Coerce(int), vol.In([0, 90, 180, 270])),
             vol.Optional("dither"): _dither_flag,
             vol.Optional("antialias"): cv.boolean,
+            **_FORCE_FIELD,
         }
     ),
 )
@@ -262,9 +271,11 @@ def _outcome(device: ESLDevice, record: dict) -> dict:
         "detail": record.get("detail") or record.get("interpretation"),
         "at": record.get("at"),
         # Image sends add these; nothing else in the record carries them.
+        # "sent" is false when the panel already showed this picture, which
+        # is a success with no transfer behind it.
         **{
             key: record[key]
-            for key in ("bytes", "sent_bytes", "compressed", "encoding")
+            for key in ("sent", "bytes", "sent_bytes", "compressed", "encoding")
             if key in record
         },
     }
@@ -375,6 +386,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
 
     def _request_from(call: ServiceCall, **source) -> ImageRequest:
         return ImageRequest(
+            force=call.data["force"],
             rotate=call.data["rotate"],
             mirror=call.data["mirror"],
             invert=call.data["invert"],
@@ -444,6 +456,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 "antialias": bool(antialias),
             },
             resources=resources,
+            force=call.data["force"],
             dither=dither,
             # Drawn at panel resolution already; fitting would letterbox it.
             stretch=True,

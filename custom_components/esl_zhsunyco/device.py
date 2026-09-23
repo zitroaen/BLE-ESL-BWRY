@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import logging
 import time
 from dataclasses import dataclass, field
@@ -147,6 +148,11 @@ class ESLState:
     last_image_png: bytes | None = None
     last_image_at: Any = None
     last_image_source: str | None = None
+    # Digest of the bytes last accepted by the panel, so a repeat send of
+    # the same picture can be skipped. Of the wire payload, not of the
+    # preview, because that is what decides whether the panel would end
+    # up any different.
+    last_payload_digest: str | None = None
 
     @property
     def error_text(self) -> str | None:
@@ -374,10 +380,11 @@ class ESLDevice:
         # Before the platforms come up, so the image entity has its picture
         # from its very first state rather than briefly showing nothing.
         if (stored := await self._image_store.async_load()) is not None:
-            png, at, source = stored
+            png, at, source, digest = stored
             self.state.last_image_png = png
             self.state.last_image_at = at
             self.state.last_image_source = source
+            self.state.last_payload_digest = digest
             _LOGGER.debug(
                 "%s restored the panel image from %s", self.address, at.isoformat()
             )
@@ -918,6 +925,9 @@ class ESLDevice:
         self.state.last_image_png = None
         self.state.last_image_at = None
         self.state.last_image_source = None
+        # And the panel will differ from anything sent before, so the next
+        # send must go out even if it draws exactly what was there.
+        self.state.last_payload_digest = None
         await self._image_store.async_clear()
         _LOGGER.debug("%s screen cleared", self.address)
         return record
@@ -947,6 +957,23 @@ class ESLDevice:
             ) from err
 
         raw = rendered.payload
+        digest = hashlib.sha256(raw).hexdigest()
+        if not request.force and digest == self.state.last_payload_digest:
+            # The panel is already showing exactly this. A transfer would
+            # cost a minute of the label being invisible to Bluetooth, a
+            # full colour refresh and the battery for both, and change
+            # nothing. Callers that want it anyway pass force.
+            _LOGGER.debug("%s image unchanged, not sending", self.address)
+            return {
+                "kind": "send_image",
+                "at": dt_util.utcnow().isoformat(),
+                "result": "ok",
+                "detail": "the panel is already showing this image",
+                "sent": False,
+                "bytes": len(raw),
+                "encoding": rendered.encoding,
+            }
+
         payload, compressed = self._compressed_or_raw(raw)
         record = await self._run_command(
             f"send_image ({len(payload)} bytes)",
@@ -963,10 +990,12 @@ class ESLDevice:
         self.state.last_image_source = (
             request.source_name or request.path or request.pattern
         )
+        self.state.last_payload_digest = digest
         await self._image_store.async_save(
             rendered.preview_png,
             self.state.last_image_at,
             self.state.last_image_source,
+            digest,
         )
         self.coordinator.async_update_listeners()
         _LOGGER.debug(
@@ -974,6 +1003,7 @@ class ESLDevice:
         )
         return {
             **record,
+            "sent": True,
             "bytes": len(raw),
             "sent_bytes": len(payload),
             "compressed": compressed,

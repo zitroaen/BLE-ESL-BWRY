@@ -193,6 +193,10 @@
         "url": {
           "name": "URL",
           "description": "Bild, das heruntergeladen und gesendet wird. Entweder das oder ein Pfad."
+        },
+        "force": {
+          "name": "Trotzdem senden",
+          "description": "Sendet auch dann, wenn das Display genau dieses Bild schon zeigt. Standardmäßig aus: ein unverändertes Bild ist die Übertragung nicht wert."
         }
       }
     },
@@ -251,6 +255,10 @@
         "dither": {
           "name": "Dithering",
           "description": "Floyd-Steinberg-Dithering anwenden."
+        },
+        "force": {
+          "name": "Trotzdem senden",
+          "description": "Sendet auch dann, wenn das Display genau dieses Bild schon zeigt. Standardmäßig aus: ein unverändertes Bild ist die Übertragung nicht wert."
         }
       }
     },
@@ -281,6 +289,10 @@
         "antialias": {
           "name": "Kantenglättung",
           "description": "Glättet die Kanten von Text und Symbolen. Aus wird jedes Pixel ganz gesetzt oder gar nicht, was auf einem Vierfarb-Display schärfer aussieht."
+        },
+        "force": {
+          "name": "Trotzdem senden",
+          "description": "Sendet auch dann, wenn das Display genau dieses Bild schon zeigt. Standardmäßig aus: ein unverändertes Bild ist die Übertragung nicht wert."
         }
       }
     }

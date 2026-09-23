@@ -59,6 +59,9 @@ class ImageRequest:
     dither: bool = True
     stretch: bool = False
     background: tuple[int, int, int] = field(default=(255, 255, 255))
+    # Send even when the panel already shows exactly this. Off by default:
+    # an unchanged picture is not worth a transfer.
+    force: bool = False
     # What to call this image in the UI. Needed because a downloaded image
     # arrives as raw bytes with no path to name it by.
     source_name: str | None = None
