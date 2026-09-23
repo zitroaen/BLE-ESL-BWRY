@@ -58,6 +58,28 @@ The payload is assembled from two halves:
 Keeping them apart means redesigning the frame does not mean touching
 Jinja, and changing how entries look does not mean re-exporting a layout.
 
+## `calendar_modern_layout.json` — a quieter draft
+
+A second take on the same job, for two calendars rather than four, in
+black and red only. Instead of a seven column grid it uses one big date,
+today's entries as a list, the rest of the week as a compact column, and
+the next collection as a band along the bottom — the one thing you want
+to catch from across the room.
+
+Send it as it stands to see it on the panel:
+
+```yaml
+action: esl_zhsunyco.drawcustom
+data:
+  device_id: <your label>
+  antialias: false
+  dither: false
+  payload: !include calendar_modern_layout.json
+```
+
+It holds example entries, so it draws the same picture every time. The
+script that fills it from real calendars comes once the layout is settled.
+
 ## `week_calendar_layout.json` — the same screen, static
 
 The whole thing as one payload with example entries, ready to import into

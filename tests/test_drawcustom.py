@@ -90,6 +90,35 @@ def test_a_missing_y_stacks_below_the_element_before_it() -> None:
     assert max(rows) - min(rows) > 20
 
 
+def test_tracking_opens_a_line_up_and_keeps_it_centred() -> None:
+    """Letterspaced small caps are the one thing a label layout needs."""
+
+    def extent(**extra):
+        image = render(
+            [
+                {
+                    "type": "text",
+                    "value": "FAMILIE",
+                    "x": WIDTH // 2,
+                    "y": 10,
+                    "size": 20,
+                    "anchor": "ma",
+                    **extra,
+                }
+            ],
+            antialias=False,
+        ).convert("L")
+        box = image.point(lambda value: 255 - value).getbbox()
+        return box[0], box[2]
+
+    plain_left, plain_right = extent()
+    wide_left, wide_right = extent(tracking=6)
+
+    assert wide_right - wide_left > plain_right - plain_left
+    # Still centred: the anchor has to account for the added space.
+    assert abs((wide_left + wide_right) - (plain_left + plain_right)) <= 2
+
+
 def test_a_colour_tag_only_applies_when_asked_for() -> None:
     tagged = {"type": "text", "value": "a[red]b[/red]", "x": 0, "y": 0, "size": 30}
     plain = render([tagged])

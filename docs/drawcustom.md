@@ -170,6 +170,7 @@ it, which is useful when the value comes from a template.
 | `y_padding` | `10` | Gap above, when `y` is left out |
 | `stroke_width`, `stroke_fill` | `0`, - | Outline around the glyphs |
 | `parse_colors` | `false` | Read `[red]...[/red]` tags inside the value |
+| `tracking` | `0` | Extra pixels between letters. For small caps labels; gives up kerning |
 | `font` | built in | See **Fonts** below |
 
 ### multiline

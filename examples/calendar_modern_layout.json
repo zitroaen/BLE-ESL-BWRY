@@ -1,0 +1,410 @@
+{
+  "background": "white",
+  "rotate": 0,
+  "payload": [
+    {
+      "type": "text",
+      "value": "MONTAG",
+      "x": 48,
+      "y": 44,
+      "size": 21,
+      "font": "Roboto-Bold",
+      "color": "red",
+      "anchor": "la",
+      "tracking": 6
+    },
+    {
+      "type": "text",
+      "value": "21",
+      "x": 42,
+      "y": 66,
+      "size": 124,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "September",
+      "x": 204,
+      "y": 96,
+      "size": 34,
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "2026",
+      "x": 204,
+      "y": 136,
+      "size": 26,
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "KW 39",
+      "x": 752,
+      "y": 46,
+      "size": 19,
+      "color": "black",
+      "anchor": "ra",
+      "tracking": 3
+    },
+    {
+      "type": "text",
+      "value": "HEUTE",
+      "x": 48,
+      "y": 196,
+      "size": 16,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "la",
+      "tracking": 5
+    },
+    {
+      "type": "text",
+      "value": "DIE WOCHE",
+      "x": 452,
+      "y": 196,
+      "size": 16,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "la",
+      "tracking": 5
+    },
+    {
+      "type": "line",
+      "x_start": 48,
+      "y_start": 222,
+      "x_end": 752,
+      "y_end": 222,
+      "fill": "black",
+      "width": 1
+    },
+    {
+      "type": "line",
+      "x_start": 48,
+      "y_start": 221,
+      "x_end": 134,
+      "y_end": 221,
+      "fill": "red",
+      "width": 3
+    },
+    {
+      "type": "line",
+      "x_start": 420,
+      "y_start": 234,
+      "x_end": 420,
+      "y_end": 374,
+      "fill": "black",
+      "width": 1
+    },
+    {
+      "type": "text",
+      "value": "08:30",
+      "x": 48,
+      "y": 240,
+      "size": 20,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "Zahnarzt Lena",
+      "x": 134,
+      "y": 240,
+      "size": 20,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 278,
+      "truncate": true
+    },
+    {
+      "type": "rectangle",
+      "x_start": 50,
+      "y_start": 284,
+      "x_end": 60,
+      "y_end": 294,
+      "fill": "red",
+      "outline": null
+    },
+    {
+      "type": "text",
+      "value": "Restmüll rausstellen",
+      "x": 134,
+      "y": 276,
+      "size": 20,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 278,
+      "truncate": true
+    },
+    {
+      "type": "text",
+      "value": "17:15",
+      "x": 48,
+      "y": 312,
+      "size": 20,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "Training",
+      "x": 134,
+      "y": 312,
+      "size": 20,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 278,
+      "truncate": true
+    },
+    {
+      "type": "text",
+      "value": "19:30",
+      "x": 48,
+      "y": 348,
+      "size": 20,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "Kino mit Papa",
+      "x": 134,
+      "y": 348,
+      "size": 20,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 278,
+      "truncate": true
+    },
+    {
+      "type": "text",
+      "value": "Di",
+      "x": 452,
+      "y": 240,
+      "size": 17,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "22",
+      "x": 486,
+      "y": 240,
+      "size": 17,
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "Elternabend Klasse 3b",
+      "x": 518,
+      "y": 240,
+      "size": 17,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 234,
+      "truncate": true
+    },
+    {
+      "type": "text",
+      "value": "Mi",
+      "x": 452,
+      "y": 264,
+      "size": 17,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "23",
+      "x": 486,
+      "y": 264,
+      "size": 17,
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "line",
+      "x_start": 518,
+      "y_start": 273,
+      "x_end": 530,
+      "y_end": 273,
+      "fill": "black",
+      "width": 1
+    },
+    {
+      "type": "text",
+      "value": "Do",
+      "x": 452,
+      "y": 288,
+      "size": 17,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "24",
+      "x": 486,
+      "y": 288,
+      "size": 17,
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "Gelber Sack",
+      "x": 518,
+      "y": 288,
+      "size": 17,
+      "color": "red",
+      "anchor": "la",
+      "max_width": 234,
+      "truncate": true
+    },
+    {
+      "type": "text",
+      "value": "Fr",
+      "x": 452,
+      "y": 312,
+      "size": 17,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "25",
+      "x": 486,
+      "y": 312,
+      "size": 17,
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "Werkstatt, Bus abholen",
+      "x": 518,
+      "y": 312,
+      "size": 17,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 234,
+      "truncate": true
+    },
+    {
+      "type": "text",
+      "value": "Sa",
+      "x": 452,
+      "y": 336,
+      "size": 17,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "26",
+      "x": 486,
+      "y": 336,
+      "size": 17,
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "Brunch bei Oma",
+      "x": 518,
+      "y": 336,
+      "size": 17,
+      "color": "black",
+      "anchor": "la",
+      "max_width": 234,
+      "truncate": true
+    },
+    {
+      "type": "text",
+      "value": "So",
+      "x": 452,
+      "y": 360,
+      "size": 17,
+      "font": "Roboto-Bold",
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "text",
+      "value": "27",
+      "x": 486,
+      "y": 360,
+      "size": 17,
+      "color": "black",
+      "anchor": "la"
+    },
+    {
+      "type": "line",
+      "x_start": 518,
+      "y_start": 369,
+      "x_end": 530,
+      "y_end": 369,
+      "fill": "black",
+      "width": 1
+    },
+    {
+      "type": "rectangle",
+      "x_start": 48,
+      "y_start": 396,
+      "x_end": 752,
+      "y_end": 452,
+      "fill": "red",
+      "outline": null,
+      "radius": 6
+    },
+    {
+      "type": "icon",
+      "value": "mdi:trash-can-outline",
+      "x": 70,
+      "y": 410,
+      "size": 32,
+      "color": "white"
+    },
+    {
+      "type": "text",
+      "value": "RESTMÜLL",
+      "x": 118,
+      "y": 413,
+      "size": 26,
+      "font": "Roboto-Bold",
+      "color": "white",
+      "anchor": "la",
+      "tracking": 2
+    },
+    {
+      "type": "text",
+      "value": "heute rausstellen",
+      "x": 730,
+      "y": 417,
+      "size": 21,
+      "color": "white",
+      "anchor": "ra"
+    },
+    {
+      "type": "text",
+      "value": "aktualisiert 07:15",
+      "x": 752,
+      "y": 458,
+      "size": 13,
+      "color": "black",
+      "anchor": "ra"
+    }
+  ]
+}

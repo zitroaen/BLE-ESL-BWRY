@@ -417,10 +417,20 @@ def _wrap(draw, text: str, font, max_width: float) -> list[str]:
     return lines
 
 
-def _anchor_offset(draw, text: str, font, anchor: str) -> tuple[float, float]:
+def _text_width(draw, text: str, font, tracking: float = 0.0) -> float:
+    """How wide a string is, including any extra letter spacing."""
+    if not tracking:
+        return draw.textlength(text, font=font)
+    glyphs = sum(draw.textlength(character, font=font) for character in text)
+    return glyphs + tracking * max(0, len(text) - 1)
+
+
+def _anchor_offset(
+    draw, text: str, font, anchor: str, tracking: float = 0.0
+) -> tuple[float, float]:
     """How far to shift a left/top drawn string for a given anchor."""
     horizontal, vertical = (anchor + "lt")[:2]
-    width = draw.textlength(text, font=font)
+    width = _text_width(draw, text, font, tracking)
     ascent, descent = font.getmetrics()
     dx = {"l": 0.0, "m": -width / 2, "r": -width}.get(horizontal, 0.0)
     dy = {
@@ -447,29 +457,38 @@ def _draw_line_of_text(
     parse_colors: bool = False,
     stroke_width: int = 0,
     stroke_fill: tuple[int, int, int] | None = None,
+    tracking: float = 0.0,
 ) -> None:
     """Draw one line at a top-left origin, honouring the anchor ourselves.
 
     Pillow can do anchors, but not per-run colours, so the placement maths
     lives here and every run is then drawn left to right from the same
     resolved origin.
+
+    With `tracking` the glyphs are placed one at a time, which is the only
+    way to open a string up. That gives up kerning - the trade every
+    letterspaced line makes anyway, and those are short labels.
     """
     runs = _split_colored(text, color, ctx) if parse_colors else [(text, color)]
     plain = "".join(run[0] for run in runs)
-    dx, dy = _anchor_offset(draw, plain, font, anchor)
+    dx, dy = _anchor_offset(draw, plain, font, anchor, tracking)
     pen = x + dx
     top = y + dy
     for piece, run_color in runs:
-        draw.text(
-            (pen, top),
-            piece,
-            font=font,
-            fill=run_color,
-            anchor="la",
-            stroke_width=stroke_width,
-            stroke_fill=stroke_fill,
-        )
-        pen += draw.textlength(piece, font=font)
+        options = {
+            "font": font,
+            "fill": run_color,
+            "anchor": "la",
+            "stroke_width": stroke_width,
+            "stroke_fill": stroke_fill,
+        }
+        if tracking:
+            for character in piece:
+                draw.text((pen, top), character, **options)
+                pen += draw.textlength(character, font=font) + tracking
+        else:
+            draw.text((pen, top), piece, **options)
+            pen += draw.textlength(piece, font=font)
 
 
 def _element_y(element: dict, ctx: _Context, padding: float) -> float:
@@ -495,6 +514,7 @@ def _render_text(draw, element: dict, ctx: _Context) -> None:
     stroke_width = _int(element, "stroke_width", 0, ctx)
     stroke_fill = _color(element, ctx, "stroke_fill", None) if stroke_width else None
     parse_colors = bool(element.get("parse_colors", False))
+    tracking = _number(element.get("tracking", 0), ctx.width, ctx, "tracking")
 
     x = _x(element, ctx)
     y = _element_y(element, ctx, padding)
@@ -504,12 +524,12 @@ def _render_text(draw, element: dict, ctx: _Context) -> None:
         limit = _number(max_width, ctx.width, ctx, "max_width")
         plain = _COLOR_TAG.sub("", value) if parse_colors else value
         if element.get("truncate"):
-            if draw.textlength(plain, font=font) > limit:
+            if _text_width(draw, plain, font, tracking) > limit:
                 # Cut to fit and say that something was cut. An ellipsis
                 # is one glyph wide where three dots are three.
                 while (
                     len(plain) > 1
-                    and draw.textlength(plain + "\u2026", font=font) > limit
+                    and _text_width(draw, plain + "\u2026", font, tracking) > limit
                 ):
                     plain = plain[:-1]
                 plain = plain.rstrip(" ") + "\u2026"
@@ -538,8 +558,9 @@ def _render_text(draw, element: dict, ctx: _Context) -> None:
             parse_colors=parse_colors,
             stroke_width=stroke_width,
             stroke_fill=stroke_fill,
+            tracking=tracking,
         )
-    _, dy = _anchor_offset(draw, lines[0] if lines else "", font, anchor)
+    _, dy = _anchor_offset(draw, lines[0] if lines else "", font, anchor, tracking)
     ctx.cursor_y = y + dy + len(lines) * height + max(0, len(lines) - 1) * spacing
 
 
@@ -561,6 +582,7 @@ def _render_multiline(draw, element: dict, ctx: _Context) -> None:
     anchor = str(element.get("anchor", "lt")).lower()
     padding = _number(element.get("y_padding", 10), ctx.height, ctx, "y_padding")
     parse_colors = bool(element.get("parse_colors", False))
+    tracking = _number(element.get("tracking", 0), ctx.width, ctx, "tracking")
     x = _x(element, ctx)
     y = _element_y(element, ctx, padding)
 
@@ -575,8 +597,9 @@ def _render_multiline(draw, element: dict, ctx: _Context) -> None:
             anchor,
             ctx,
             parse_colors=parse_colors,
+            tracking=tracking,
         )
-    _, dy = _anchor_offset(draw, lines[0] if lines else "", font, anchor)
+    _, dy = _anchor_offset(draw, lines[0] if lines else "", font, anchor, tracking)
     ctx.cursor_y = y + dy + len(lines) * height
 
 

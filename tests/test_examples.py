@@ -158,6 +158,13 @@ def test_running_only_the_action_says_so_on_the_panel() -> None:
     assert _draw(elements).width == WIDTH
 
 
+def test_the_modern_draft_layout_still_draws() -> None:
+    block = json.loads((EXAMPLES / "calendar_modern_layout.json").read_text("utf-8"))
+    elements, _ = drawcustom.normalise(block)
+    drawcustom.validate(elements)
+    assert _draw(elements).width == WIDTH
+
+
 def test_the_designer_layout_still_draws() -> None:
     block = json.loads((EXAMPLES / "week_calendar_layout.json").read_text("utf-8"))
     elements, options = drawcustom.normalise(block)
