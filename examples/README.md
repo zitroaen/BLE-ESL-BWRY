@@ -99,6 +99,22 @@ Wednesday. It costs one of that day's two lines.
 The waste calendar is read 60 days ahead. Five collections reach that far
 when one bin is fortnightly and another monthly; a week would show two.
 
+## `family_calendar_automation.yaml` — when to send it
+
+Daily just after midnight, because the date changed, and whenever the
+entries change.
+
+There is no event for the second one: a calendar does not announce that
+somebody moved an appointment. So a template sensor polls both calendars
+every fifteen minutes and hashes what it finds; the automation fires when
+that hash changes. Sending only on a real change is the point, because
+every transfer costs battery and hides the label from Bluetooth while it
+runs — sending blindly every fifteen minutes would be waste.
+
+The sensor polls exactly the windows the screen draws, seven days and
+sixty. A family entry three weeks out changes nothing visible, so it must
+not trigger a send; a test checks the two stay in step.
+
 ## `calendar_modern_layout.json` — the layout on its own
 
 The same screen as `family_calendar.yaml`, frozen with example entries:
