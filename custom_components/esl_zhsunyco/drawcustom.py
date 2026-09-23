@@ -195,7 +195,31 @@ def normalise(payload: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
             raise DrawError(
                 f"element {index} must be an object, got {type(element).__name__}"
             )
-    return payload, options
+    return [_repair_yaml_booleans(element) for element in payload], options
+
+
+def _repair_yaml_booleans(element: dict[str, Any]) -> dict[str, Any]:
+    """Put back a `y` that a YAML 1.1 reader turned into a boolean.
+
+    YAML 1.1 reads a bare `y` as true, so `y: 198` in a payload written as
+    YAML can arrive as `{True: 198}`. The symptom is subtle and expensive:
+    the element keeps its x, loses its y, and is quietly stacked under the
+    one before it, so a label lands at the top of the panel instead of
+    where it was put. Nothing else can produce a boolean key, so taking it
+    as the y it was written as is safe.
+    """
+    if True not in element and False not in element:
+        return element
+    repaired = {
+        "y" if key is True else "n" if key is False else key: value
+        for key, value in element.items()
+    }
+    _LOGGER.warning(
+        "payload element %r had a boolean key: a YAML reader took the bare "
+        "key 'y' as true. Reading it as 'y'; quote the key to avoid this",
+        repaired.get("value", repaired.get("type", "?")),
+    )
+    return repaired
 
 
 def validate(elements: list[dict[str, Any]]) -> None:
@@ -346,9 +370,12 @@ def _bundled_font(size: int, *, bold: bool):
     if path.is_file():
         return _font_file(str(path), size)
     _LOGGER.warning(
-        "%s is missing, falling back to the built in font - it has no "
-        "umlauts and no accents. Run scripts/fetch_assets.py",
+        "%s is missing from %s, so text falls back to Pillow's own font, "
+        "which draws every umlaut and accent as an empty box. Redownload "
+        "the integration in HACS and restart; from a git checkout, run "
+        "scripts/fetch_assets.py",
         path.name,
+        ASSETS,
     )
     return ImageFont.load_default(size=size)
 

@@ -311,6 +311,17 @@ def test_the_family_script_says_when_only_the_action_ran() -> None:
     assert any("Skript" in value for value in _values(elements))
 
 
+def test_the_examples_quote_the_y_key() -> None:
+    """A bare `y:` in YAML can be read as a boolean and lose the position.
+
+    This bit once: two headings arrived without their y and stacked at the
+    top edge of a real panel.
+    """
+    for name in ("family_calendar.yaml", "week_calendar.yaml"):
+        text = (EXAMPLES / name).read_text("utf-8")
+        assert "\n          y: " not in text, f"{name} has an unquoted y key"
+
+
 def test_the_designer_layout_still_draws() -> None:
     block = json.loads((EXAMPLES / "week_calendar_layout.json").read_text("utf-8"))
     elements, options = drawcustom.normalise(block)

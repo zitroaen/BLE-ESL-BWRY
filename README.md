@@ -605,6 +605,41 @@ unable to hold a link. Three causes, in the order worth trying:
 The error message names how many connectable scanners exist and which one
 heard the label last, which separates the first case from the third.
 
+### Umlauts come out as empty boxes
+
+Text is drawn in Roboto, which ships with the integration. If that file
+is not there, drawing falls back to Pillow's own font, which covers ASCII
+and nothing else — so `Müller` comes out as `M□ller`, silently, because a
+missing glyph is not an error.
+
+Check the log (Settings → System → Logs, filter `esl_zhsunyco`) for:
+
+```
+Roboto-Regular.ttf is missing, falling back to the built in font
+```
+
+Download diagnostics from the device page also lists every bundled file
+under `assets` with its size, or `MISSING`.
+
+The fix is to redownload the integration in HACS and restart Home
+Assistant — an update that skipped the font files is the usual cause.
+
+### An element ends up at the top of the panel
+
+A bare `y` is a special case in YAML: `y: 198` can be read as `true: 198`,
+which loses the position while `x` survives. The element then stacks under
+whatever came before it, usually landing near the top edge.
+
+The integration puts such a key back and logs a warning, but the way to
+avoid it is to quote the key in any payload written as YAML:
+
+```yaml
+- type: text
+  value: HEUTE
+  x: 48
+  "y": 198
+```
+
 ### "Unknown device id"
 
 `device_id` wants the device's registry id, a long hex string — not the

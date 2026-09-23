@@ -10,6 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .device import ESLDevice
+from .drawcustom import ASSETS
 from .protocol import BATTERY_CANDIDATES
 
 _LOGGER = logging.getLogger(__name__)
@@ -26,6 +27,26 @@ NO_PROBE_HINT = (
 )
 
 
+def _assets() -> dict[str, Any]:
+    """Which bundled files are on disk, and how big.
+
+    Worth reporting because a partial install fails quietly: a missing
+    icon font is an error, but a missing text font only falls back to
+    Pillow's own, which draws every umlaut as an empty box.
+    """
+    wanted = (
+        "Roboto-Regular.ttf",
+        "Roboto-Bold.ttf",
+        "materialdesignicons-webfont.ttf",
+        "mdi-codepoints.json",
+    )
+    found = {}
+    for name in wanted:
+        path = ASSETS / name
+        found[name] = path.stat().st_size if path.is_file() else "MISSING"
+    return found
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
@@ -39,6 +60,7 @@ async def async_get_config_entry_diagnostics(
             "data": async_redact_data(dict(entry.data), TO_REDACT),
             "options": dict(entry.options),
         },
+        "assets": _assets(),
         "panel": {
             "model": device.model,
             "width": device.width,

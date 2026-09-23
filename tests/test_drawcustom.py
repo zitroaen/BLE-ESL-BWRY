@@ -269,6 +269,34 @@ def test_halftones_become_a_mixed_colour_for_the_ditherer() -> None:
 # --- payload handling -----------------------------------------------------
 
 
+def test_a_y_that_yaml_turned_into_a_boolean_is_put_back() -> None:
+    """YAML 1.1 reads a bare `y` as true, and the symptom is expensive.
+
+    The element keeps its x, loses its y, and is quietly stacked under the
+    one before it - so a heading lands at the top edge instead of where it
+    was put, with nothing to show what happened.
+    """
+    element = {"type": "text", "value": "HEUTE", "x": 48, "size": 16}
+    broken = {**element, True: 198}
+
+    elements, _ = drawcustom.normalise([broken])
+    assert elements[0]["y"] == 198
+
+    def top(payload):
+        image = render(payload, antialias=False).convert("L")
+        return image.point(lambda value: 255 - value).getbbox()[1]
+
+    assert top([{**element, "y": 198}]) == top(elements)
+
+
+def test_an_element_without_a_y_still_stacks() -> None:
+    """The repair must not take the auto-stacking away from anyone."""
+    elements, _ = drawcustom.normalise(
+        [{"type": "text", "value": "a", "x": 0, "y": 0}, {"type": "text", "value": "b"}]
+    )
+    assert "y" not in elements[1]
+
+
 def test_a_bare_list_is_a_payload_with_no_options() -> None:
     elements, options = drawcustom.normalise([{"type": "text", "value": "a"}])
     assert options == {}
