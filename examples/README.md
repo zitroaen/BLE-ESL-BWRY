@@ -60,11 +60,17 @@ Jinja, and changing how entries look does not mean re-exporting a layout.
 
 ## `calendar_modern_layout.json` — a quieter draft
 
-A second take on the same job, for two calendars rather than four, in
-black and red only. Instead of a seven column grid it uses one big date,
-today's entries as a list, the rest of the week as a compact column, and
-the next collection as a band along the bottom — the one thing you want
-to catch from across the room.
+A second take on the same job, for two calendars rather than four.
+Instead of a seven column grid it uses one big date, today's entries as a
+list, the rest of the week as a column up the right hand side, and the
+next collection as a band along the bottom — the one thing you want to
+catch from across the room.
+
+Colour says one thing at a time. Red marks the bin and Sunday, and
+nothing else; the accent under HEUTE is the only yellow. A day in the
+week column takes the one or two lines it needs and the next follows, so
+quiet days leave no holes, and a day with more than fits ends in a small
+`+2`.
 
 Send it as it stands to see it on the panel:
 
