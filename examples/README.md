@@ -66,11 +66,20 @@ list, the rest of the week as a column up the right hand side, and the
 next collection as a band along the bottom — the one thing you want to
 catch from across the room.
 
-Colour says one thing at a time. Red marks the bin and Sunday, and
-nothing else; the accent under HEUTE is the only yellow. A day in the
-week column takes the one or two lines it needs and the next follows, so
-quiet days leave no holes, and a day with more than fits ends in a small
-`+2`.
+Colour says one thing at a time. The accent under HEUTE is the only
+yellow. Red marks Sunday, and the one collection that has to go out
+**tonight** — nothing else. On a day with nothing to put out, the whole
+strip is black, so red on this screen always means act.
+
+The bottom strip holds the next five collections, which usually reach
+weeks past the seven days above it: a fortnightly bin and a monthly one
+take a month and a half to add up to five. Days inside the week that have
+a collection also carry a small bin next to the date, which ties the two
+halves together without repeating the text.
+
+A day in the week column takes the one or two lines it needs and the next
+follows, so quiet days leave no holes, and a day with more than fits ends
+in a small `+2`.
 
 Send it as it stands to see it on the panel:
 
