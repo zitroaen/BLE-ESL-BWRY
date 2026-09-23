@@ -58,13 +58,53 @@ The payload is assembled from two halves:
 Keeping them apart means redesigning the frame does not mean touching
 Jinja, and changing how entries look does not mean re-exporting a layout.
 
-## `calendar_modern_layout.json` — a quieter draft
+## `family_calendar.yaml` — the one in use
 
-A second take on the same job, for two calendars rather than four.
-Instead of a seven column grid it uses one big date, today's entries as a
-list, the rest of the week as a column up the right hand side, and the
-next collection as a band along the bottom — the one thing you want to
-catch from across the room.
+Two calendars, `calendar.familie` and `calendar.abfallkalender`, on an
+800 × 480 panel:
+
+- **left** the date, large, and everything on today
+- **right** the six days after it, two lines each, `+2` where more follow
+- **bottom** the next five collections
+
+### What to change
+
+1. `device_id`, to your label.
+2. The two `calendar.` entity ids, if yours are named differently — in
+   the `calendar.get_events` steps **and** in the template, which reads
+   them back by name.
+3. The `tonnen` table in the template, if your council writes the bins
+   differently. It maps a keyword in the calendar entry to a short name
+   and an icon, which is there because a raw entry like
+   `Restmuellbehaelter` is both too wide for a chip and missing its
+   umlaut.
+
+Run it as a **script**, not as a single action: the entries come from the
+two steps before the drawing one. Starting only the `drawcustom` action
+draws a line telling you so rather than failing.
+
+### Two decisions worth knowing about
+
+**The red chip is about tomorrow, not today.** By the morning of
+collection day the bin is either out or it is too late, so a warning then
+is noise. The collection that has to go out tonight is labelled `MORGEN`
+and filled red; everything else on the screen is black, except Sunday.
+On a day with nothing to put out there is no red at all, which is what
+lets red mean act.
+
+**All-day entries repeat.** A four day holiday appears on each of its
+four days, because that is what you want to see when you glance at
+Wednesday. It costs one of that day's two lines.
+
+The waste calendar is read 60 days ahead. Five collections reach that far
+when one bin is fortnightly and another monthly; a week would show two.
+
+## `calendar_modern_layout.json` — the layout on its own
+
+The same screen as `family_calendar.yaml`, frozen with example entries:
+no calendars needed, so it draws the same picture every time. Send it to
+see the layout on the panel, or import it into the ESPHome Designer to
+move things around.
 
 Colour says one thing at a time. The accent under HEUTE is the only
 yellow. Red marks Sunday, and the one collection that has to go out

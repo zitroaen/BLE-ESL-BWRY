@@ -1,0 +1,292 @@
+# Familienkalender fuer ein 800x480 ESL (BLE-750BWRY)
+#
+# Zeigt calendar.familie und calendar.abfallkalender:
+#   links   grosses Datum und die Termine von heute
+#   rechts  die sechs Folgetage, zwei Zeilen je Tag, "+x" fuer den Rest
+#   unten   die naechsten fuenf Abfuhren. Rot ist nur die, die HEUTE ABEND
+#           rausmuss - am Abfuhrtag selbst waere die Warnung zu spaet.
+#
+# Anpassen: device_id, und bei anderen Tonnennamen die Tabelle "tonnen"
+# im Template.
+#
+# WICHTIG: als Skript ausfuehren, nicht als einzelne Aktion. Die Termine
+# entstehen in den beiden Schritten davor.
+
+alias: ESL Familienkalender
+mode: single
+sequence:
+  - action: calendar.get_events
+    target:
+      entity_id: calendar.familie
+    data:
+      start_date_time: "{{ today_at() }}"
+      duration:
+        days: 7
+    response_variable: familie
+
+  # Weiter als eine Woche: fuenf Abfuhren reichen bei 14-taegigem Restmuell
+  # und monatlicher Biotonne gut sechs Wochen in die Zukunft.
+  - action: calendar.get_events
+    target:
+      entity_id: calendar.abfallkalender
+    data:
+      start_date_time: "{{ today_at() }}"
+      duration:
+        days: 60
+    response_variable: abfall
+
+  # Der feste Teil des Layouts: Rubriken und Linien, sonst nichts. Das ist
+  # der Block, den der ESPHome Designer bearbeiten kann.
+  - variables:
+      chrome:
+        - type: text
+          value: HEUTE
+          x: 48
+          y: 198
+          size: 16
+          font: Roboto-Bold
+          color: black
+          anchor: la
+          tracking: 5
+        - type: line
+          x_start: 48
+          y_start: 226
+          x_end: 430
+          y_end: 226
+          fill: black
+          width: 1
+        - type: line
+          x_start: 48
+          y_start: 226
+          x_end: 136
+          y_end: 226
+          fill: yellow
+          width: 4
+        - type: text
+          value: DIE WOCHE
+          x: 452
+          y: 40
+          size: 16
+          font: Roboto-Bold
+          color: black
+          anchor: la
+          tracking: 5
+        - type: line
+          x_start: 452
+          y_start: 68
+          x_end: 752
+          y_end: 68
+          fill: black
+          width: 1
+        - type: line
+          x_start: 48
+          y_start: 384
+          x_end: 752
+          y_end: 384
+          fill: black
+          width: 1
+
+  - action: esl_zhsunyco.drawcustom
+    data:
+      device_id: DEINE_GERAETE_ID
+      background: white
+      # Keine Kantenglaettung, kein Dithering: jedes Pixel sitzt.
+      antialias: false
+      dither: false
+      payload: >-
+        {#- Geometrie. Aendert sich das Layout, aendert sich nur dieser Block. -#}
+        {% set L = 48 %}{% set R = 752 %}{% set LEFT_END = 430 %}
+        {% set RIGHT = 452 %}{% set ICON_X = 514 %}{% set EVENT_X = 536 %}
+        {% set LINE = 20 %}{% set GAP = 8 %}{% set CHIP_W = 140 %}
+
+        {% set kurz = ['Mo','Di','Mi','Do','Fr','Sa','So'] %}
+        {% set lang = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag',
+                       'Samstag','Sonntag'] %}
+        {% set monat = ['Januar','Februar','März','April','Mai','Juni','Juli',
+                        'August','September','Oktober','November','Dezember'] %}
+
+        {#- Tonnen: Stichwort im Kalendertitel -> kurzer Name + Symbol.
+            Die Originaltitel sind zu breit fuer die Chips und haben keine
+            Umlaute, deshalb diese Tabelle. Neue Tonne? Hier eine Zeile dazu. -#}
+        {% set tonnen = [
+             ['biomuell',    'Bio',         'mdi:leaf'],
+             ['restmuell',   'Restmüll',    'mdi:trash-can-outline'],
+             ['gelb',        'Gelbe Tonne', 'mdi:recycle'],
+             ['glas',        'Glas',        'mdi:bottle-wine-outline'],
+             ['papier',      'Papier',      'mdi:newspaper-variant-outline'],
+             ['schadstoff',  'Schadstoffe', 'mdi:truck-alert-outline'] ] %}
+
+        {% set heute = today_at() %}
+        {% set ns = namespace(tage=[], termine=[], abfuhren=[], out=[]) %}
+        {%- for i in range(60) %}
+          {%- set ns.tage = ns.tage + [(heute + timedelta(days=i)).strftime('%Y-%m-%d')] %}
+        {%- endfor %}
+
+        {#- Ohne die Schritte davor laeuft nur die Aktion: das sagen statt abbrechen. -#}
+        {%- set chrome = chrome | default([]) %}
+        {%- set familie = familie | default({}) %}
+        {%- set abfall = abfall | default({}) %}
+        {%- if not chrome %}
+          {%- set ns.out = ns.out + [
+                {'type':'rectangle','x_start':40,'y_start':190,'x_end':760,'y_end':290,
+                 'fill':'yellow','outline':'black','width':2},
+                {'type':'text','value':'Nur diese Aktion ausgeführt','x':400,'y':212,
+                 'size':26,'font':'Roboto-Bold','color':'black','anchor':'ma'},
+                {'type':'text','value':'Das ganze Skript starten – die Termine kommen '
+                 'aus den Schritten davor','x':400,'y':250,'size':17,'color':'black',
+                 'anchor':'ma'} ] %}
+        {%- endif %}
+
+        {#- Familientermine einsammeln. Ganztaegige erscheinen an jedem Tag,
+            ueber den sie laufen; das Ende ist exklusiv. -#}
+        {%- for e in familie.get('calendar.familie', {}).get('events', []) %}
+          {%- set ganztags = 'T' not in e.start %}
+          {%- for off in range(7) %}
+            {%- set d = ns.tage[off] %}
+            {%- if (ganztags and e.start[:10] <= d and d < e.end[:10])
+                   or (not ganztags and e.start[:10] == d) %}
+              {%- set ns.termine = ns.termine + [[off, e.start,
+                    '' if ganztags else e.start[11:16], e.summary]] %}
+            {%- endif %}
+          {%- endfor %}
+        {%- endfor %}
+
+        {#- Abfuhren der naechsten 60 Tage, mit kurzem Namen und Symbol. -#}
+        {%- for e in abfall.get('calendar.abfallkalender', {}).get('events', []) %}
+          {%- set d = e.start[:10] %}
+          {%- if d in ns.tage %}
+            {%- set titel = e.summary | lower %}
+            {%- set t = namespace(label=e.summary, icon='mdi:trash-can-outline') %}
+            {%- for key, label, icon in tonnen %}
+              {%- if key in titel %}
+                {%- set t.label = label %}{% set t.icon = icon %}
+              {%- endif %}
+            {%- endfor %}
+            {%- set ns.abfuhren = ns.abfuhren + [[ns.tage.index(d), t.label, t.icon]] %}
+          {%- endif %}
+        {%- endfor %}
+        {% set abfuhren = ns.abfuhren | sort(attribute='0') | list %}
+
+        {#- Datum ------------------------------------------------------------- -#}
+        {%- set ns.out = ns.out + [
+              {'type':'text','value': lang[heute.weekday()] | upper,'x':L,'y':40,
+               'size':21,'font':'Roboto-Bold',
+               'color':'red' if heute.weekday() == 6 else 'black',
+               'anchor':'la','tracking':6},
+              {'type':'text','value':'KW ' ~ heute.strftime('%V'),'x':LEFT_END,'y':42,
+               'size':18,'color':'black','anchor':'ra','tracking':3},
+              {'type':'text','value': heute.day | string,'x':L - 6,'y':62,'size':124,
+               'font':'Roboto-Bold','color':'black','anchor':'la'},
+              {'type':'text','value': monat[heute.month - 1],'x':L + 156,'y':92,
+               'size':34,'color':'black','anchor':'la'},
+              {'type':'text','value': heute.year | string,'x':L + 156,'y':134,
+               'size':26,'color':'black','anchor':'la'} ] %}
+
+        {#- Heute -------------------------------------------------------------- -#}
+        {%- set heutige = ns.termine | selectattr('0','eq',0) | sort(attribute='1') | list %}
+        {%- if heutige %}
+          {%- for e in heutige[:4] %}
+            {%- set y = 244 + loop.index0 * 34 %}
+            {%- if e[2] %}
+              {%- set ns.out = ns.out + [{'type':'text','value':e[2],'x':L,'y':y,
+                    'size':20,'font':'Roboto-Bold','color':'black','anchor':'la'}] %}
+            {%- else %}
+              {%- set ns.out = ns.out + [{'type':'rectangle','x_start':L + 2,
+                    'y_start':y + 8,'x_end':L + 12,'y_end':y + 18,'fill':'black',
+                    'outline':none}] %}
+            {%- endif %}
+            {%- set ns.out = ns.out + [{'type':'text','value':e[3],'x':L + 86,'y':y,
+                  'size':20,'color':'black','anchor':'la',
+                  'max_width': LEFT_END - (L + 86),'truncate':true}] %}
+          {%- endfor %}
+          {%- if heutige | length > 4 %}
+            {%- set ns.out = ns.out + [{'type':'text',
+                  'value':'+' ~ (heutige | length - 4),'x':LEFT_END,'y':346,'size':15,
+                  'color':'black','anchor':'ra'}] %}
+          {%- endif %}
+        {%- else %}
+          {%- set ns.out = ns.out + [{'type':'text','value':'Nichts eingetragen',
+                'x':L,'y':244,'size':20,'color':'black','anchor':'la'}] %}
+        {%- endif %}
+
+        {#- Die Woche ---------------------------------------------------------- -#}
+        {%- set pos = namespace(y=82) %}
+        {%- for off in range(1, 7) %}
+          {%- set tag = heute + timedelta(days=off) %}
+          {%- set farbe = 'red' if tag.weekday() == 6 else 'black' %}
+          {%- set des_tages = ns.termine | selectattr('0','eq',off) | sort(attribute='1') | list %}
+          {%- set tonne = abfuhren | selectattr('0','eq',off) | list | first %}
+          {%- set ns.out = ns.out + [
+                {'type':'text','value': kurz[tag.weekday()],'x':RIGHT,'y':pos.y,
+                 'size':16,'font':'Roboto-Bold','color':farbe,'anchor':'la'},
+                {'type':'text','value': tag.day | string,'x':RIGHT + 30,'y':pos.y,
+                 'size':16,'color':farbe,'anchor':'la'} ] %}
+          {%- if tonne %}
+            {%- set ns.out = ns.out + [{'type':'icon','value':tonne[2],'x':ICON_X,
+                  'y':pos.y,'size':16,'color':'black'}] %}
+          {%- endif %}
+          {%- if des_tages %}
+            {%- set sichtbar = des_tages[:2] %}
+            {%- set mehr = des_tages | length - sichtbar | length %}
+            {%- for e in sichtbar %}
+              {%- set letzte = loop.last %}
+              {%- set ns.out = ns.out + [{'type':'text',
+                    'value': (e[2] ~ '  ' if e[2] else '') ~ e[3],'x':EVENT_X,
+                    'y':pos.y + loop.index0 * LINE,'size':16,'color':'black',
+                    'anchor':'la','truncate':true,
+                    'max_width': R - EVENT_X - (30 if letzte and mehr else 0)}] %}
+            {%- endfor %}
+            {%- if mehr %}
+              {%- set ns.out = ns.out + [{'type':'text','value':'+' ~ mehr,'x':R,
+                    'y':pos.y + (sichtbar | length - 1) * LINE + 1,'size':14,
+                    'color':'black','anchor':'ra'}] %}
+            {%- endif %}
+            {%- set pos.y = pos.y + (sichtbar | length) * LINE + GAP %}
+          {%- else %}
+            {%- set ns.out = ns.out + [{'type':'line','x_start':EVENT_X,
+                  'y_start':pos.y + 9,'x_end':EVENT_X + 12,'y_end':pos.y + 9,
+                  'fill':'black','width':1}] %}
+            {%- set pos.y = pos.y + LINE + GAP %}
+          {%- endif %}
+        {%- endfor %}
+
+        {#- Abfuhrleiste: die naechsten fuenf. Rot ist, was heute Abend raus muss. -#}
+        {%- for a in abfuhren[:5] %}
+          {%- set off = a[0] %}
+          {%- set tag = heute + timedelta(days=off) %}
+          {%- set wann = 'heute' if off == 0 else ('morgen' if off == 1 else
+                (kurz[tag.weekday()] ~ ' ' ~ tag.day ~ '.' ~
+                 (tag.month ~ '.' if off > 7 else ''))) %}
+          {%- set x = L + loop.index0 * CHIP_W %}
+          {%- set dringend = off == 1 %}
+          {%- if dringend %}
+            {%- set ns.out = ns.out + [{'type':'rectangle','x_start':x - 10,
+                  'y_start':392,'x_end':x + CHIP_W - 16,'y_end':446,'fill':'red',
+                  'outline':none,'radius':6}] %}
+          {%- endif %}
+          {%- set tinte = 'white' if dringend else 'black' %}
+          {%- set ns.out = ns.out + [
+                {'type':'text','value': wann | upper,'x':x,'y':398,'size':14,
+                 'font':'Roboto-Bold','color':tinte,'anchor':'la','tracking':1},
+                {'type':'icon','value':a[2],'x':x,'y':418,'size':17,'color':tinte},
+                {'type':'text','value':a[1],'x':x + 22,'y':419,'size':16,
+                 'color':tinte,'anchor':'la','max_width':CHIP_W - 40,'truncate':true} ] %}
+        {%- endfor %}
+
+        {%- set ns.out = ns.out + [{'type':'text',
+              'value':'aktualisiert ' ~ now().strftime('%H:%M'),'x':R,'y':458,
+              'size':13,'color':'black','anchor':'ra'}] %}
+
+        {{ (chrome + ns.out) | to_json }}
+    response_variable: ergebnis
+
+  - if:
+      - condition: template
+        value_template: "{{ not ergebnis.results[0].ok }}"
+    then:
+      - action: persistent_notification.create
+        data:
+          title: ESL Familienkalender
+          message: >-
+            Uebertragung fehlgeschlagen:
+            {{ ergebnis.results[0].detail }}
