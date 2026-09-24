@@ -132,6 +132,25 @@ avoid it is to quote the key in any payload written as YAML:
   "y": 198
 ```
 
+## "No ESL device selected"
+
+The service was called with no target at all. When `device_id` is a
+template, that is what an unmatched lookup looks like: `device_id('...')`
+returns nothing, and Home Assistant turns that into an empty list.
+
+The message lists every label with its id. To see the same thing
+yourself, in **Developer Tools → Template**:
+
+```jinja
+{% for entity in integration_entities('esl_zhsunyco') %}
+{{ entity }} -> {{ device_id(entity) }}
+{% endfor %}
+```
+
+The id on the right is what `device_id:` wants. Pasting it literally is
+the version that cannot break; a name lookup only holds while the name
+does.
+
 ## "Unknown device id"
 
 `device_id` wants the device's registry id, a long hex string — not the

@@ -34,6 +34,28 @@ async def test_the_label_name_is_answered_with_its_id(
     assert "device_id(" in message, "and the template that avoids looking it up"
 
 
+async def test_an_empty_target_says_the_template_found_nothing(
+    hass: HomeAssistant, config_entry, mock_bluetooth
+) -> None:
+    """A device_id template that matches nothing renders as None.
+
+    Home Assistant turns that into an empty list, so the service is called
+    with no target at all - which used to come back as "No ESL device
+    selected", a sentence that names neither the cause nor the cure.
+    """
+    device = await _setup(hass, config_entry)
+
+    for empty in (None, "", []):
+        with pytest.raises(ServiceValidationError) as caught:
+            await hass.services.async_call(
+                DOMAIN, SERVICE_CLEAR_SCREEN, {"device_id": empty}, blocking=True
+            )
+        message = str(caught.value)
+        assert "rendered empty" in message, empty
+        assert device.id in message, "it has to hand over the id that works"
+        assert device.name in message
+
+
 async def test_an_id_that_is_nothing_at_all_is_still_refused(
     hass: HomeAssistant, config_entry, mock_bluetooth
 ) -> None:

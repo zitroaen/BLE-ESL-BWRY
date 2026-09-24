@@ -281,6 +281,35 @@ def _outcome(device: ESLDevice, record: dict) -> dict:
     }
 
 
+def _labels(hass: HomeAssistant, registry) -> str:
+    """Every label this integration has, by name and by id.
+
+    Both failures below end with the same question - which device did you
+    mean - so both answer it with the list rather than with advice.
+    """
+    known = []
+    for entry_id in hass.data.get(DOMAIN, {}):
+        for device in dr.async_entries_for_config_entry(registry, entry_id):
+            name = device.name_by_user or device.name
+            known.append(f"{name!r} -> {device.id}")
+    return "; ".join(known) or "none are set up"
+
+
+def _nothing_selected(hass: HomeAssistant, registry) -> str:
+    """Explain an empty target, which is nearly always a template.
+
+    A device_id template that matches nothing renders as None, and Home
+    Assistant turns that into an empty list - so the service is called
+    with no target at all rather than with a wrong one. That is why the
+    message cannot name what was meant: nothing arrived.
+    """
+    return (
+        "No ESL device selected. If device_id is a template, it found "
+        "nothing and rendered empty - check the name it looks up against "
+        f"these: {_labels(hass, registry)}"
+    )
+
+
 def _unknown_device(hass: HomeAssistant, registry, given: str) -> str:
     """Explain a device id that is not one, and hand over the right one.
 
@@ -299,7 +328,7 @@ def _unknown_device(hass: HomeAssistant, registry, given: str) -> str:
                     f"Use device_id: {device.id} - or let Home Assistant "
                     f'look it up: device_id: "{template}"'
                 )
-    return f"Unknown device id {given}"
+    return f"Unknown device id {given}. Labels: {_labels(hass, registry)}"
 
 
 def _resolve_devices(hass: HomeAssistant, call: ServiceCall) -> list[ESLDevice]:
@@ -308,6 +337,10 @@ def _resolve_devices(hass: HomeAssistant, call: ServiceCall) -> list[ESLDevice]:
     devices: list[ESLDevice] = []
 
     for device_id in call.data[ATTR_DEVICE_ID]:
+        if not device_id:
+            # An empty string gets here where None does not: ensure_list
+            # drops None but keeps "". Same cause, same answer.
+            raise ServiceValidationError(_nothing_selected(hass, registry))
         entry_device = registry.async_get(device_id)
         if entry_device is None:
             raise ServiceValidationError(_unknown_device(hass, registry, device_id))
@@ -323,7 +356,7 @@ def _resolve_devices(hass: HomeAssistant, call: ServiceCall) -> list[ESLDevice]:
             )
 
     if not devices:
-        raise ServiceValidationError("No ESL device selected")
+        raise ServiceValidationError(_nothing_selected(hass, registry))
     return devices
 
 
